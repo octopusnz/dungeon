@@ -1,7 +1,23 @@
 {
   "items": [
-    "Health Potion",
-    "Rusty Dagger",
-    "Health Potion"
-  ]
+    "Lacy undergarments",
+    "Potion of Healing",
+    "Stale bread",
+    "Potion of Healing",
+    "Two-headed copper coin",
+    "Pouch of pixie dust",
+    "Signet ring (5 gp)",
+    "Empty flask (3 cp)",
+    "Iridescent scale",
+    "Potion of Climbing",
+    "Sausage",
+    "Mushrooms (poisonous)",
+    "Brass ring",
+    "Lacy undergarments",
+    "Turnip",
+    "Blood-stained map of the Dark Catacombs of Frica"
+  ],
+  "copper_pieces": 185,
+  "silver_pieces": 257,
+  "gold_pieces": 144
 }
