@@ -3,13 +3,11 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::fs;
 
-fn main() {
-    let options = vec![
-        "PickPocket",
-        "Show Inventory",
-        "Exit program",
-    ];
+const MENU_OPTIONS: &[&str] = &["PickPocket", "Show Inventory", "Exit program"];
+const LOOT_ITEMS: &[&str] = &["Gold Coin", "Silver Ring", "Rusty Dagger", "Health Potion"];
+const SAVE_FILE: &str = "inventory.json";
 
+fn main() {
     let mut inventory = Inventory::load().unwrap_or_else(|_| {
         println!("No existing inventory found, starting fresh!");
         Inventory::new()
@@ -18,7 +16,7 @@ fn main() {
     loop {
         let selection = dialoguer::Select::with_theme(&dialoguer::theme::ColorfulTheme::default())
             .with_prompt("Choose an option")
-            .items(&options)
+            .items(MENU_OPTIONS)
             .default(0)
             .interact()
             .unwrap();
@@ -45,8 +43,7 @@ fn pick_pocket(inventory: &mut Inventory) {
     let success = rng.random_bool(0.5); // 50% chance of success
     
     if success {
-        let loot = vec!["Gold Coin", "Silver Ring", "Rusty Dagger", "Health Potion"];
-        if let Some(item) = loot.choose(&mut rng) {
+        if let Some(item) = LOOT_ITEMS.choose(&mut rng) {
             inventory.add(item);
         }
     } else {
@@ -87,12 +84,12 @@ impl Inventory {
 
     fn save(&self) -> Result<(), Box<dyn std::error::Error>> {
         let json = serde_json::to_string_pretty(self)?;
-        fs::write("inventory.json", json)?;
+        fs::write(SAVE_FILE, json)?;
         Ok(())
     }
     
     fn load() -> Result<Self, Box<dyn std::error::Error>> {
-        let data = fs::read_to_string("inventory.json")?;
+        let data = fs::read_to_string(SAVE_FILE)?;
         let inventory = serde_json::from_str(&data)?;
         Ok(inventory)
     }
