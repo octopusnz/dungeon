@@ -1,9 +1,5 @@
 {
   "items": [
-    "Lacy undergarments",
-    "Potion of Healing",
-    "Stale bread",
-    "Potion of Healing",
     "Two-headed copper coin",
     "Pouch of pixie dust",
     "Signet ring (5 gp)",
@@ -21,12 +17,15 @@
     "Stale bread",
     "Deep blue spinel (500 gp)",
     "Pair of dice engraved with runes",
-    "Potion of Invisibility",
-    "Simple lock (20 gp)",
-    "Potion of Invisibility",
-    "Simple lock (20 gp)"
+    "Document of identification",
+    "Whetstone (2 cp)",
+    "Eight unusual coins",
+    "Rusted nails",
+    "Small steel mirror (10 gp)",
+    "Turnip"
   ],
-  "copper_pieces": 220,
-  "silver_pieces": 531,
-  "gold_pieces": 150
+  "copper_pieces": 225,
+  "silver_pieces": 648,
+  "gold_pieces": 2507,
+  "luck_boost": false
 }
