@@ -1,5 +1,6 @@
 use rand::prelude::IndexedRandom;
 use rand::Rng;
+use rand::seq::SliceRandom;
 use crate::inventory::{Inventory, format_cp};
 use crate::loot::{parse_and_format_loot_cached, currency_regex};
 use crate::rng::with_rng;
@@ -98,13 +99,52 @@ pub fn fight_monster(inv: &mut Inventory) {
     }
 }
 
+pub const HAGGLE_SUCCESS_CHANCE: f64 = 0.50; // 50% default base chance
+
+#[derive(Clone, Copy, Debug)]
+enum Rarity { Common, Uncommon, Rare, Epic, Legendary }
+
+impl Rarity {
+    fn price_range_cp(&self) -> std::ops::RangeInclusive<u32> {
+        match self {
+            // Ranges constrained to overall 5cp .. 500gp (5 .. 50000 cp)
+            Rarity::Common => 5..=50,             // 5cp - 5sp
+            Rarity::Uncommon => 50..=500,         // 5sp - 5gp
+            Rarity::Rare => 500..=5_000,          // 5gp - 50gp
+            Rarity::Epic => 5_000..=20_000,       // 50gp - 200gp
+            Rarity::Legendary => 20_000..=50_000, // 200gp - 500gp
+        }
+    }
+    fn label(&self) -> &'static str {
+        match self { Rarity::Common=>"Common", Rarity::Uncommon=>"Uncommon", Rarity::Rare=>"Rare", Rarity::Epic=>"Epic", Rarity::Legendary=>"Legendary" }
+    }
+}
+
 pub fn visit_shop(inv: &mut Inventory) {
-    if inv.items.is_empty() { crate::print_simple_header("Shop"); println!("🛒 The shop is quiet. You have no items to sell."); return; }
+    loop {
+        crate::print_simple_header("Shop");
+        println!("🛒 You enter a cluttered shop filled with wares.");
+        println!("What would you like to do?");
+        let mut options = vec!["Buy Items".to_string(), "Sell Items".to_string(), "Leave Shop".to_string()];
+        if inv.items.is_empty() { options[1] = "Sell Items (none to sell)".into(); }
+        let choice = Select::new().items(&options).default(0).interact();
+        let Ok(choice) = choice else { println!("You step back from the shop."); return; };
+        match choice {
+            0 => buy_items(inv),
+            1 => if !inv.items.is_empty() { sell_items(inv) } else { println!("You have nothing to sell.") },
+            2 => { println!("You leave the shop."); return; },
+            _ => unreachable!()
+        }
+    }
+}
+
+fn sell_items(inv: &mut Inventory) {
+    if inv.items.is_empty() { return; }
     let prices_cp: Vec<u32> = with_rng(|r| inv.items.iter().map(|_| r.random_range(30..=1000)).collect());
     let display: Vec<String> = inv.items.iter().zip(&prices_cp).map(|(it,p)| format!("{} (offers {})", it, format_cp(*p))).collect();
-    crate::print_simple_header("Shop"); println!("🛒 Dealer eyes your goods..."); println!("Select items to sell:");
+    println!("Select items to sell:");
     let selections = MultiSelect::new().items(&display).interact();
-    let selected = match selections { Ok(v) if !v.is_empty() => v, Ok(_) => { println!("Nothing sold."); return; }, Err(e) => { println!("Shop failed: {}", e); return; } };
+    let selected = match selections { Ok(v) if !v.is_empty() => v, Ok(_) => { println!("Nothing sold."); return; }, Err(e) => { println!("Sale aborted: {}", e); return; } };
     let mut total_cp: u32 = 0; for &idx in &selected { total_cp = total_cp.saturating_add(prices_cp[idx]); }
     println!("💰 Offer: {} for {} item(s).", format_cp(total_cp), selected.len());
     if !Confirm::new().with_prompt("Accept deal?").default(true).interact().unwrap_or(false) { println!("You decline."); return; }
@@ -115,6 +155,64 @@ pub fn visit_shop(inv: &mut Inventory) {
     inv.add_copper(total_cp); inv.save_after_pickup();
     crate::print_event_summary("Shop Sale", &before, inv, &[], &removed);
     println!("✅ Sold {} item(s).", removed.len());
+}
+
+fn buy_items(inv: &mut Inventory) {
+    // Stock generation (fresh each visit to Buy screen) with rarity tiers
+    const STOCK: &[(&str, Rarity)] = &[
+        // Mundane (Common / Uncommon)
+        ("Rope (50ft)", Rarity::Common), ("Torch", Rarity::Common), ("Lantern", Rarity::Common), ("Oil Flask", Rarity::Common),
+        ("Iron Rations", Rarity::Common), ("Waterskin", Rarity::Common), ("Lockpicks", Rarity::Uncommon), ("Bedroll", Rarity::Common),
+        ("Backpack", Rarity::Common), ("Shovel", Rarity::Common), ("Grappling Hook", Rarity::Uncommon), ("Hammer & Pitons", Rarity::Common),
+        ("Herb Bundle", Rarity::Common), ("Ink & Quill", Rarity::Common), ("Chalk Pouch", Rarity::Common),
+        // Magical lower tier
+        ("Potion of Healing", Rarity::Uncommon), ("Potion of Invisibility", Rarity::Rare), ("Scroll of Fireball", Rarity::Rare),
+        ("Scroll of Shielding", Rarity::Uncommon), ("Ring of Protection", Rarity::Epic), ("Amulet of Light", Rarity::Epic),
+        ("Wand of Sparks", Rarity::Uncommon), ("Boots of Silence", Rarity::Rare), ("Cloak of Shadows", Rarity::Epic),
+        ("Elixir of Luck", Rarity::Rare), ("Orb of Annihilation Shard", Rarity::Legendary)
+    ];
+    // Shuffle and take slice
+    let mut pool: Vec<(&str, Rarity)> = STOCK.to_vec();
+    with_rng(|r| pool.shuffle(r));
+    let stock_count = with_rng(|r| r.random_range(6..=10).min(pool.len() as u32)) as usize;
+    let stock: Vec<(&str, Rarity)> = pool.into_iter().take(stock_count).collect();
+    // Generate prices per rarity
+    let prices_cp: Vec<u32> = with_rng(|r| {
+        stock.iter().map(|(_, rar)| {
+            let range = rar.price_range_cp();
+            // Weight slightly toward lower end by sampling two and taking min for higher rarities
+            let sample = |r: &mut rand::rngs::SmallRng| r.random_range(*range.start()..=*range.end());
+            match rar { Rarity::Epic | Rarity::Legendary => sample(r).min(sample(r)), _ => sample(r) }
+        }).collect()
+    });
+    let display: Vec<String> = stock.iter().enumerate().map(|(i,(name,rar))| {
+        format!("{} [{}] ({} )", name, rar.label(), format_cp(prices_cp[i]))
+    }).collect();
+    println!("Select items to buy (rarity influences price):");
+    let selections = MultiSelect::new().items(&display).interact();
+    let selected = match selections { Ok(v) if !v.is_empty() => v, Ok(_) => { println!("You buy nothing."); return; }, Err(e) => { println!("Purchase aborted: {}", e); return; } };
+    let mut total_cp: u32 = 0; for &idx in &selected { total_cp = total_cp.saturating_add(prices_cp[idx]); }
+    println!("🧾 Base total for {} item(s): {}", selected.len(), format_cp(total_cp));
+    // Haggle (luck increases success chance and is consumed if present)
+    let mut final_cp = total_cp;
+    if Confirm::new().with_prompt("Attempt to haggle? (-25% success, +10% failure)").default(false).interact().unwrap_or(false) {
+        let mut success_chance = HAGGLE_SUCCESS_CHANCE;
+        if inv.luck_boost { success_chance = 0.85; }
+        let success = with_rng(|r| r.random_bool(success_chance));
+        if success { final_cp = ((final_cp as f64) * 0.75).round() as u32; println!("🤑 Haggle success! New price: {} (chance {:.0}%)", format_cp(final_cp), success_chance*100.0); }
+        else { final_cp = ((final_cp as f64) * 1.10).round() as u32; println!("😬 Haggle failed. Merchant raises price to {} (chance {:.0}%)", format_cp(final_cp), success_chance*100.0); }
+        if inv.luck_boost { inv.luck_boost = false; println!("✨ Your stored luck is spent in the negotiation."); }
+    }
+    println!("💰 Final price: {} (you have {})", format_cp(final_cp), format_cp(inv.total_cp()));
+    if !Confirm::new().with_prompt("Proceed with purchase?").default(true).interact().unwrap_or(false) { println!("You decide not to buy."); return; }
+    if inv.total_cp() < final_cp { println!("Not enough funds."); return; }
+    if !inv.try_spend_cp(final_cp) { println!("Payment processing error."); return; }
+    let before = inv.clone();
+    let mut added: Vec<String> = Vec::new();
+    for &idx in &selected { let name = stock[idx].0.to_string(); inv.add_item(&name); added.push(name); }
+    inv.save_after_pickup();
+    crate::print_event_summary("Shop Purchase", &before, inv, &added, &[]);
+    println!("✅ Purchased {} item(s).", added.len());
 }
 
 pub fn visit_tavern(inv: &mut Inventory) {
