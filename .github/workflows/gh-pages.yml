@@ -18,6 +18,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -34,7 +36,8 @@ jobs:
             wasm-${{ runner.os }}-
       - name: Install wasm-bindgen-cli (match lockfile)
         run: |
-          VERSION=$(grep -m1 'name = "wasm-bindgen"' -n Cargo.lock >/dev/null 2>&1 && grep -A1 'name = "wasm-bindgen"' Cargo.lock | grep version | head -n1 | cut -d '"' -f2)
+          set -euo pipefail
+          VERSION=$(grep -A1 'name = "wasm-bindgen"' Cargo.lock | grep 'version =' | head -n1 | cut -d '"' -f2)
           echo "Using wasm-bindgen-cli version ${VERSION}"
           if ! command -v wasm-bindgen >/dev/null; then
             cargo install wasm-bindgen-cli --version "${VERSION}" --locked
@@ -61,6 +64,11 @@ jobs:
           # sudo apt-get update && sudo apt-get install -y binaryen && wasm-opt -Oz -o web/pkg/dungeon_core_bg.opt.wasm web/pkg/dungeon_core_bg.wasm && mv web/pkg/dungeon_core_bg.opt.wasm web/pkg/dungeon_core_bg.wasm
           # Add a simple version stamp for cache busting
           echo "build_sha=$(git rev-parse --short HEAD)" > web/pkg/version.txt
+          # Ensure a .nojekyll file so GitHub Pages serves files verbatim
+          touch web/.nojekyll
+          # Basic sanity check for expected artifacts
+          test -f web/index.html || { echo 'index.html missing in web/'; exit 1; }
+          test -f web/pkg/dungeon_core_bg.wasm || { echo 'wasm-bindgen output missing'; ls -R web/pkg; exit 1; }
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
@@ -75,5 +83,6 @@ jobs:
       - name: Summarize deployed URL
         run: |
           echo "Deployed to: $GITHUB_PAGES_URL" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "Commit: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
         env:
           GITHUB_PAGES_URL: ${{ steps.deployment.outputs.page_url }}
