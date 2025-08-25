@@ -94,8 +94,11 @@ impl Game {
         if attempt_haggle && !parsed.is_empty() {
             let success_chance = if self.inv.luck_boost { 0.85 } else { 0.50 };
             let success = rng.gen_bool(success_chance);
-            if success { total_cp = ((total_cp as f64)*0.75).round() as u32; }
-            else { total_cp = ((total_cp as f64)*1.10).round() as u32; }
+            if success {
+                total_cp = ((total_cp as f64) * 0.75).round() as u32;
+            } else {
+                total_cp = ((total_cp as f64) * 1.10).round() as u32;
+            }
             if self.inv.luck_boost { self.inv.luck_boost = false; }
         }
     let msg = if self.inv.total_cp() >= total_cp { let _ = self.inv.try_spend_cp(total_cp); for (n,_,_) in parsed { self.inv.add_item(&n); } format!("Purchased items total {} cp", total_cp) } else { format!("Insufficient funds for {} cp purchase", total_cp) };
@@ -125,14 +128,11 @@ impl Game {
         pool.shuffle(&mut rng);
         let count = rng.gen_range(6..=10).min(pool.len() as u32) as usize;
         let chosen = pool.into_iter().take(count);
-        let mut id = 0u32;
-        let mut items: Vec<ShopItem> = Vec::new();
-        for (name,rar) in chosen {
+        let items: Vec<ShopItem> = chosen.enumerate().map(|(id,(name,rar))| {
             let range = rar.price_range_cp();
             let price = rng.gen_range(*range.start()..=*range.end());
-            items.push(ShopItem { id, name: name.to_string(), rarity: rar.label().to_string(), price_cp: price });
-            id+=1;
-        }
+            ShopItem { id: id as u32, name: name.to_string(), rarity: rar.label().to_string(), price_cp: price }
+        }).collect();
         self.shop = Some(items.clone());
         serde_wasm_bindgen::to_value(&ShopState { items, haggle_applied: false }).unwrap()
     }
@@ -147,7 +147,19 @@ impl Game {
         for i in indices.iter() { if let Some(it) = stock.iter().find(|s| s.id==*i) { total = total.saturating_add(it.price_cp); names.push(it.name.clone()); } }
         if total==0 { return self.wrap("Selection invalid"); }
         let mut final_total = total; let mut haggle_msg = String::new();
-        if attempt_haggle { let chance = if self.inv.luck_boost {0.85} else {HAGGLE_SUCCESS_CHANCE}; let mut rng = rand::rngs::SmallRng::from_entropy(); let success = rng.gen_bool(chance); if success { final_total = ((final_total as f64)*0.75).round() as u32; haggle_msg = format!("Haggle success ({}%)", (chance*100.0) as u32);} else { final_total = ((final_total as f64)*1.10).round() as u32; haggle_msg = format!("Haggle failed ({}%)", (chance*100.0) as u32);} if self.inv.luck_boost { self.inv.luck_boost=false; } }
+        if attempt_haggle {
+            let chance = if self.inv.luck_boost {0.85} else {HAGGLE_SUCCESS_CHANCE};
+            let mut rng = rand::rngs::SmallRng::from_entropy();
+            let success = rng.gen_bool(chance);
+            if success {
+                final_total = ((final_total as f64)*0.75).round() as u32;
+                haggle_msg = format!("Haggle success ({}%)", (chance*100.0) as u32);
+            } else {
+                final_total = ((final_total as f64)*1.10).round() as u32;
+                haggle_msg = format!("Haggle failed ({}%)", (chance*100.0) as u32);
+            }
+            if self.inv.luck_boost { self.inv.luck_boost=false; }
+        }
         if self.inv.total_cp() < final_total { return self.wrap(format!("Need {} cp but only have {} cp", final_total, self.inv.total_cp())); }
         let _ = self.inv.try_spend_cp(final_total);
         for n in names.iter() { self.inv.add_item(n); }

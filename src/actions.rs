@@ -48,19 +48,17 @@ pub fn fight_monster_outcome(inv: &mut Inventory) -> FightOutcome {
         inv.gold_pieces = inv.gold_pieces.saturating_add(reward);
         inv.save_after_pickup();
         FightOutcome { monster: monster.name, victory: true, reward_gp: reward, loss_gp: 0 }
+    } else if inv.gold_pieces == 0 {
+        inv.save_after_pickup();
+        FightOutcome { monster: monster.name, victory: false, reward_gp: 0, loss_gp: 0 }
     } else {
-        if inv.gold_pieces == 0 {
-            inv.save_after_pickup();
-            FightOutcome { monster: monster.name, victory: false, reward_gp: 0, loss_gp: 0 }
-        } else {
-            let loss_percent = with_rng(|r| r.gen_range(5..=10));
-            let loss = ((inv.gold_pieces as f64) * (loss_percent as f64 / 100.0)).round() as u32;
-            let loss = loss.clamp(1, inv.gold_pieces);
-            inv.gold_pieces -= loss;
-            inv.save_after_pickup();
-            let _ = before; // silence if not used elsewhere
-            FightOutcome { monster: monster.name, victory: false, reward_gp: 0, loss_gp: loss }
-        }
+        let loss_percent = with_rng(|r| r.gen_range(5..=10));
+        let loss = ((inv.gold_pieces as f64) * (loss_percent as f64 / 100.0)).round() as u32;
+        let loss = loss.clamp(1, inv.gold_pieces);
+        inv.gold_pieces -= loss;
+        inv.save_after_pickup();
+        let _ = before; // silence if not used elsewhere
+        FightOutcome { monster: monster.name, victory: false, reward_gp: 0, loss_gp: loss }
     }
 }
 
