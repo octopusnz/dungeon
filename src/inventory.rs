@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 
-const SAVE_FILE: &str = "inventory.json";
+pub const SAVE_FILE: &str = "inventory.json"; // Exposed so CLI reset flag can remove the file
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Inventory {
