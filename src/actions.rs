@@ -22,6 +22,48 @@ pub const TAVERN_FLIRT_KISS_CHANCE: f64 = 0.05; // 5% chance to gain luck via ki
 #[derive(Clone, Copy)]
 pub struct Monster { pub name: &'static str, pub strength: u8 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct FightOutcome { pub monster: &'static str, pub victory: bool, pub reward_gp: u32, pub loss_gp: u32 }
+
+pub fn fight_monster_outcome(inv: &mut Inventory) -> FightOutcome {
+    const MONSTERS: &[Monster] = &[
+        Monster { name: "Goblin Sneak", strength: 1 }, Monster { name: "Cave Rat", strength: 1 },
+        Monster { name: "Skeleton Guard", strength: 2 }, Monster { name: "Orc Marauder", strength: 3 },
+        Monster { name: "Ghoul", strength: 4 }, Monster { name: "Ogre Brute", strength: 5 },
+        Monster { name: "Wyvern", strength: 6 }, Monster { name: "Vampire Stalker", strength: 7 },
+        Monster { name: "Stone Golem", strength: 8 }, Monster { name: "Ancient Lich", strength: 9 },
+        Monster { name: "Dragon Wyrm", strength: 10 },
+    ];
+    let monster = with_rng(|r| *MONSTERS.choose(r).unwrap());
+    let success_chance = (0.85_f64 - (monster.strength as f64 * 0.07)).max(0.05);
+    let success = with_rng(|r| r.gen_bool(success_chance));
+    let before = inv.clone();
+    if success {
+        let (min_gp, max_gp) = {
+            let min_gp = (20 * (monster.strength as u32).max(1) / 2).max(10);
+            let max_gp = (50 * monster.strength as u32).min(500).max(min_gp + 5);
+            (min_gp, max_gp)
+        };
+        let reward = with_rng(|r| r.gen_range(min_gp..=max_gp));
+        inv.gold_pieces = inv.gold_pieces.saturating_add(reward);
+        inv.save_after_pickup();
+        FightOutcome { monster: monster.name, victory: true, reward_gp: reward, loss_gp: 0 }
+    } else {
+        if inv.gold_pieces == 0 {
+            inv.save_after_pickup();
+            FightOutcome { monster: monster.name, victory: false, reward_gp: 0, loss_gp: 0 }
+        } else {
+            let loss_percent = with_rng(|r| r.gen_range(5..=10));
+            let loss = ((inv.gold_pieces as f64) * (loss_percent as f64 / 100.0)).round() as u32;
+            let loss = loss.clamp(1, inv.gold_pieces);
+            inv.gold_pieces -= loss;
+            inv.save_after_pickup();
+            let _ = before; // silence if not used elsewhere
+            FightOutcome { monster: monster.name, victory: false, reward_gp: 0, loss_gp: loss }
+        }
+    }
+}
+
 pub fn pick_pocket(inv: &mut Inventory, loot_items: &[String]) {
     let before = inv.clone();
     let mut non_currency_added: Vec<String> = Vec::with_capacity(4);
@@ -56,46 +98,18 @@ pub fn pick_pocket(inv: &mut Inventory, loot_items: &[String]) {
 }
 
 pub fn fight_monster(inv: &mut Inventory) {
-    const MONSTERS: &[Monster] = &[
-        Monster { name: "Goblin Sneak", strength: 1 }, Monster { name: "Cave Rat", strength: 1 },
-        Monster { name: "Skeleton Guard", strength: 2 }, Monster { name: "Orc Marauder", strength: 3 },
-        Monster { name: "Ghoul", strength: 4 }, Monster { name: "Ogre Brute", strength: 5 },
-        Monster { name: "Wyvern", strength: 6 }, Monster { name: "Vampire Stalker", strength: 7 },
-        Monster { name: "Stone Golem", strength: 8 }, Monster { name: "Ancient Lich", strength: 9 },
-        Monster { name: "Dragon Wyrm", strength: 10 },
-    ];
     crate::print_simple_header("Battle");
-    let monster = with_rng(|r| *MONSTERS.choose(r).unwrap());
-    println!("⚔️  A wild {} (strength {}) appears!", monster.name, monster.strength);
-    let success_chance = (0.85_f64 - (monster.strength as f64 * 0.07)).max(0.05);
-    println!("🧮 Success chance: {:>2}%", (success_chance * 100.0).round() as u32);
-    let success = with_rng(|r| r.gen_bool(success_chance));
     let before = inv.clone();
-    if success {
-        let (min_gp, max_gp) = {
-            let min_gp = (20 * (monster.strength as u32).max(1) / 2).max(10);
-            let max_gp = (50 * monster.strength as u32).min(500).max(min_gp + 5);
-            (min_gp, max_gp)
-        };
-    let reward = with_rng(|r| r.gen_range(min_gp..=max_gp));
-        inv.gold_pieces = inv.gold_pieces.saturating_add(reward);
-        inv.save_after_pickup();
+    let outcome = fight_monster_outcome(inv);
+    let success_chance_note = "(chance hidden)"; // Already computed inside outcome; keep output terse
+    if outcome.victory {
         crate::print_event_summary("Victory", &before, inv, &[], &[]);
-        println!("🏆 You defeated the {}!", monster.name);
-        println!("💰 Loot: {} gold pieces", reward);
+        println!("🏆 You defeated the {}! {}", outcome.monster, success_chance_note);
+        println!("💰 Loot: {} gold pieces", outcome.reward_gp);
     } else {
-        if inv.gold_pieces == 0 {
-            crate::print_event_summary("Defeat", &before, inv, &[], &[]);
-            println!("😣 You were defeated by the {}, but had no gold.", monster.name);
-            return;
-        }
-    let loss_percent = with_rng(|r| r.gen_range(5..=10));
-        let loss = ((inv.gold_pieces as f64) * (loss_percent as f64 / 100.0)).round() as u32;
-        let loss = loss.clamp(1, inv.gold_pieces);
-        inv.gold_pieces -= loss;
-        inv.save_after_pickup();
         crate::print_event_summary("Defeat", &before, inv, &[], &[]);
-        println!("💀 The {} overpowered you! Lost {} gp ({}%).", monster.name, loss, loss_percent);
+        if outcome.loss_gp == 0 { println!("😣 You were defeated by the {}, but had no gold.", outcome.monster); }
+        else { println!("💀 The {} overpowered you! Lost {} gp.", outcome.monster, outcome.loss_gp); }
     }
 }
 

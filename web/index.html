@@ -1,34 +1,125 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><title>Dungeon WASM</title><meta name="viewport" content="width=device-width,initial-scale=1"/><style>body{font-family:system-ui,Arial,sans-serif;background:#111;color:#eee;padding:1rem;}button, input, textarea{margin:.25rem;padding:.5rem .75rem;}button{cursor:pointer;}#log{white-space:pre-wrap;background:#222;padding:1rem;border-radius:6px;min-height:140px;max-height:260px;overflow:auto;} .inv-item{display:inline-block;margin:2px 4px;padding:2px 6px;background:#333;border-radius:4px;font-size:.75rem;} .currency{margin-top:.5rem;font-weight:600;} fieldset{border:1px solid #333;border-radius:6px;margin-top:1rem;} legend{padding:0 .5rem;} label.inline{font-size:.8rem;margin-right:.75rem;} </style></head><body><h1>Dungeon (WASM)</h1><p>Browser demo of core mechanics. Enter loot / simulate encounters / shop purchases.</p>
-<fieldset><legend>Loot & Penalty</legend>
-	<input id="loot" placeholder="e.g. 3 gp and a silver ring" size=40 />
-	<button id="addLoot">Add Loot</button>
-	<button id="penalty">Apply 7% Penalty</button>
-</fieldset>
-<fieldset><legend>Pickpocket</legend>
-	<input id="ppLoot" placeholder="Pipe separated loot options e.g. 5 gp and a ruby|2 sp and a torch" size=60 />
-	<button id="pickpocket">Pickpocket</button>
-</fieldset>
-<fieldset><legend>Fight</legend>
-	<button id="fight">Fight Monster</button>
-</fieldset>
-<fieldset><legend>Shop Purchase (Simulation)</legend>
-	<textarea id="shopItems" rows=2 cols=60 placeholder="Items to buy pipe separated. Optional :rarity. Example: Potion of Healing:Uncommon|Orb Shard:Legendary"></textarea><br/>
-	<label class="inline"><input type="checkbox" id="shopHaggle"/> Attempt Haggle</label>
-	<label class="inline"><input type="checkbox" id="shopLuck"/> Spend Luck (if stored)</label>
-	<button id="shopBuy">Sim Buy</button>
-</fieldset>
-<h2>Inventory</h2><div id="inv"></div><h3>Log</h3><div id="log"></div><script type="module">import init, { Game } from './pkg/dungeon_core.js';
-const logEl = document.getElementById('log');
-const invEl = document.getElementById('inv');
-const lootInput = document.getElementById('loot');
-let game; function render(state){ invEl.innerHTML=''; state.items.forEach(i=>{ const span=document.createElement('span'); span.className='inv-item'; span.textContent=i; invEl.appendChild(span); }); const cur=document.createElement('div'); cur.className='currency'; cur.textContent=`Gold: ${state.gp}  Silver: ${state.sp}  Copper: ${state.cp}  Luck:${state.luck?'Yes':'No'}`; invEl.appendChild(cur); }
-function log(m){ const ts=new Date().toLocaleTimeString(); logEl.textContent+=`[${ts}] ${m}\n`; logEl.scrollTop=logEl.scrollHeight; }
-function state(){ return game.get_state(); }
-async function main(){ await init(); game=new Game(); render(state());
-	document.getElementById('addLoot').onclick=()=>{ const d=lootInput.value.trim(); if(!d) return; const st=game.add_loot(d); render(st); log('Added loot: '+d); lootInput.value=''; };
-	document.getElementById('penalty').onclick=()=>{ const st=game.apply_penalty(7); render(st); log('Applied 7% penalty'); };
-	document.getElementById('pickpocket').onclick=()=>{ const desc=document.getElementById('ppLoot').value.trim(); if(!desc) return; const st=game.pickpocket(desc); render(st); log('Pickpocket attempt with options: '+desc); };
-	document.getElementById('fight').onclick=()=>{ const st=game.fight(); render(st); log('Fought a monster.'); };
-	document.getElementById('shopBuy').onclick=()=>{ const items=document.getElementById('shopItems').value.trim(); if(!items) return; const haggle=document.getElementById('shopHaggle').checked; const luck=document.getElementById('shopLuck').checked; const st=game.shop_buy(items, haggle, luck); render(st); log(`Shop buy: items='${items}' haggle=${haggle} luck=${luck}`); };
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><title>Dungeon (Browser)</title><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<style>
+body{font-family:system-ui,Arial,sans-serif;background:#101317;color:#e6e6e6;margin:0;line-height:1.35}
+header{background:#181d23;padding:1rem 1.25rem;display:flex;align-items:center;gap:1rem;flex-wrap:wrap}
+h1{font-size:1.25rem;margin:0}
+main{padding:1rem;max-width:1100px;margin:0 auto}
+section.panel{background:#1b222b;border:1px solid #26303a;border-radius:10px;padding:0.75rem 1rem;margin-bottom:1rem}
+section.panel h2{font-size:1rem;margin:0 0 .5rem 0;display:flex;justify-content:space-between;align-items:center}
+button{background:#2b4b75;color:#fff;border:1px solid #355e91;border-radius:6px;font-size:.85rem;padding:.45rem .8rem;cursor:pointer;line-height:1.1}
+button:hover{background:#356294}
+button.danger{background:#7b2f2f;border-color:#934040}
+button.danger:hover{background:#9b3c3c}
+input,textarea,select{background:#141a21;color:#e6e6e6;border:1px solid #2a363f;border-radius:6px;padding:.45rem .6rem;font-size:.8rem;width:100%;box-sizing:border-box}
+textarea{resize:vertical;min-height:60px}
+fieldset{border:1px solid #2c3742;padding:.5rem  .75rem;border-radius:8px;margin:0 0 .75rem 0}
+legend{padding:0 .4rem;font-size:.75rem;letter-spacing:.5px;color:#9cb3c9}
+#inventoryItems span{display:inline-block;background:#243241;margin:2px 4px;padding:2px 6px;border-radius:4px;font-size:.7rem}
+#log{background:#0f1419;border:1px solid #1f2831;border-radius:8px;padding:.6rem;font-size:.7rem;max-height:260px;overflow:auto;font-family:ui-monospace,monospace;white-space:pre-wrap}
+.row{display:flex;flex-wrap:wrap;gap:.75rem}
+.col{flex:1 1 260px;min-width:240px}
+.currency{font-weight:600;font-size:.8rem;margin-top:.4rem}
+.tag{font-size:.55rem;padding:2px 5px;border-radius:4px;background:#334257;margin-left:.4rem;letter-spacing:.5px}
+.rar-Epic{background:#5a2f73}.rar-Legendary{background:#7a4d15}.rar-Rare{background:#224f8d}.rar-Uncommon{background:#375d2a}.rar-Common{background:#424d57}
+table.shop{width:100%;border-collapse:collapse;font-size:.7rem}
+table.shop th,table.shop td{padding:4px 6px;border-bottom:1px solid #26303a;text-align:left}
+table.shop tbody tr:hover{background:#1f2831}
+.inline{display:inline-flex;align-items:center;gap:.4rem;font-size:.65rem;margin-right:.75rem}
+.muted{color:#94a3b8;font-size:.65rem;margin-top:.25rem}
+.actions-grid{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.4rem}
+</style></head><body>
+<header>
+	<h1>Dungeon (Browser)</h1>
+	<div class="actions-grid">
+		<button id="act-pick">Pickpocket</button>
+		<button id="act-fight">Fight</button>
+		<button id="act-shop-gen">New Shop</button>
+		<button id="act-tavern">Tavern</button>
+		<button id="act-reset" class="danger">Reset</button>
+	</div>
+</header>
+<main>
+	<section class="panel" id="inv-panel">
+		<h2>Inventory <span id="inv-currency"></span></h2>
+		<div id="inventoryItems"></div>
+		<div class="muted" id="luck-ind"></div>
+	</section>
+	<div class="row">
+		<div class="col">
+			<section class="panel">
+				<h2>Pickpocket</h2>
+				<textarea id="pp-candidates" placeholder="Pipe separated loot options e.g. 5 gp and a ruby|2 sp and a torch"></textarea>
+				<button id="pp-run">Attempt Pickpocket</button>
+			</section>
+			<section class="panel">
+				<h2>Loot Input</h2>
+				<input id="loot-input" placeholder="e.g. 3 gp and a silver ring" />
+				<div class="actions-grid">
+					<button id="loot-add">Add Loot</button>
+					<button id="penalty-apply">Apply 7% Penalty</button>
+				</div>
+			</section>
+			<section class="panel" id="tavern-panel" style="display:none">
+				<h2>Tavern</h2>
+				<div class="actions-grid">
+					<button data-tv="drink">Drink</button>
+					<button data-tv="food">Food</button>
+					<button data-tv="stay">Stay</button>
+					<button data-tv="tip">Tip</button>
+					<button data-tv="flirt">Flirt</button>
+				</div>
+			</section>
+		</div>
+		<div class="col">
+			<section class="panel" id="shop-panel">
+				<h2>Shop <span style="font-weight:normal;font-size:.6rem" id="shop-hint"></span></h2>
+				<div id="shop-empty" class="muted">No shop generated. Click "New Shop".</div>
+				<div id="shop-container" style="display:none">
+					<table class="shop"><thead><tr><th></th><th>Item</th><th>Rarity</th><th>Price (cp)</th></tr></thead><tbody id="shop-body"></tbody></table>
+					<div class="actions-grid">
+						<label class="inline"><input type="checkbox" id="shop-haggle"/> Haggle</label>
+						<label class="inline"><input type="checkbox" id="shop-use-luck"/> Spend Luck</label>
+						<button id="shop-buy">Buy Selected</button>
+					</div>
+				</div>
+			</section>
+		</div>
+		<div class="col">
+			<section class="panel">
+				<h2>Log</h2>
+				<div id="log"></div>
+			</section>
+		</div>
+	</div>
+</main>
+<script type="module">
+import init, { Game } from './pkg/dungeon_core.js';
+const el = id=>document.getElementById(id);
+const logEl = el('log');
+let game; let currentShop = [];
+function log(msg){ const ts=new Date().toLocaleTimeString(); logEl.textContent += `[${ts}] ${msg}\n`; logEl.scrollTop = logEl.scrollHeight; }
+function renderState(state){
+	const invSpan = el('inventoryItems'); invSpan.innerHTML='';
+	state.items.forEach(i=>{ const s=document.createElement('span'); s.textContent=i; invSpan.appendChild(s); });
+	el('inv-currency').textContent = `GP ${state.gp} | SP ${state.sp} | CP ${state.cp}`;
+	el('luck-ind').textContent = state.luck ? 'Luck stored for next relevant action.' : '';
 }
-main();</script></body></html>
+function unwrap(result){ if(result.state){ renderState(result.state); if(result.message) log(result.message);} else { renderState(result); } }
+async function start(){ await init(); game = new Game(); unwrap(JSON.parse(game.get_state())); log('Game started'); }
+start();
+// Core actions
+el('act-reset').onclick=()=>unwrap(JSON.parse(game.reset()));
+el('loot-add').onclick=()=>{ const v=el('loot-input').value.trim(); if(!v) return; unwrap(JSON.parse(game.add_loot(v))); el('loot-input').value=''; };
+el('penalty-apply').onclick=()=>unwrap(JSON.parse(game.apply_penalty(7)));
+el('pp-run').onclick=()=>{ const c=el('pp-candidates').value.trim(); if(!c) return; unwrap(JSON.parse(game.pickpocket(c))); };
+el('act-pick').onclick=()=>{ el('pp-candidates').focus(); };
+el('act-fight').onclick=()=>unwrap(JSON.parse(game.fight()));
+// Shop
+el('act-shop-gen').onclick=()=>{ const res=JSON.parse(game.generate_shop()); currentShop = res.items; buildShop(); log('Generated new shop stock'); };
+function buildShop(){ const empty=el('shop-empty'); const cont=el('shop-container'); const body=el('shop-body'); if(!currentShop||!currentShop.length){ empty.style.display=''; cont.style.display='none'; return;} empty.style.display='none'; cont.style.display=''; body.innerHTML=''; currentShop.forEach(it=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td><input type='checkbox' data-id='${it.id}'></td><td>${it.name}</td><td><span class='tag rar-${it.rarity}'>${it.rarity}</span></td><td>${it.price_cp}</td>`; body.appendChild(tr); }); }
+el('shop-buy').onclick=()=>{ const checks=[...document.querySelectorAll('#shop-body input[type=checkbox]:checked')]; if(!checks.length){ log('No items selected'); return; } const ids=checks.map(c=>Number(c.getAttribute('data-id'))); const haggle=el('shop-haggle').checked; const spend=el('shop-use-luck').checked; unwrap(JSON.parse(game.shop_purchase(ids, haggle, spend))); };
+// Tavern
+el('act-tavern').onclick=()=>{ const p=el('tavern-panel'); p.style.display = p.style.display==='none' ? '' : 'none'; };
+document.querySelectorAll('#tavern-panel button[data-tv]').forEach(b=>{ b.onclick=()=>{ const act=b.getAttribute('data-tv'); unwrap(JSON.parse(game.tavern(act))); }; });
+</script>
+</body></html>
