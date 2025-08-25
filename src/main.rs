@@ -157,22 +157,36 @@ fn main() {
 
 fn pick_pocket(inventory: &mut Inventory, loot_items: &[String]) {
     let mut rng = rand::rng();
-    let success = rng.random_bool(0.5); // 50% chance of success
+    let random_event = rng.random_range(0.0..1.0);
     
-    if success {
-        if let Some(loot_description) = loot_items.choose(&mut rng) {
-            let individual_items = parse_loot_into_items(loot_description);
-            let formatted_display = format_items_for_display(&individual_items);
-            println!("👜 You found: {}", formatted_display);
-            
-            for item in individual_items {
-                inventory.add_item(&item);
-            }
-            
-            inventory.save_after_pickup();
-        }
+    // 5% chance for mysterious figure event
+    if random_event < 0.05 {
+        println!("🌟 A mysterious figure emerges from the shadows...");
+        println!("👤 \"I have been watching you, young thief. Your boldness amuses me.\"");
+        println!("💰 The figure tosses you a heavy pouch and vanishes into the darkness!");
+        println!("✨ You found: 1000 gold pieces");
+        
+        inventory.add_item("1000 gp");
+        inventory.save_after_pickup();
     } else {
-        println!("🚨 Caught! The NPC noticed you and calls for guards!");
+        // Normal pickpocket logic with 50% success rate
+        let success = rng.random_bool(0.5);
+        
+        if success {
+            if let Some(loot_description) = loot_items.choose(&mut rng) {
+                let individual_items = parse_loot_into_items(loot_description);
+                let formatted_display = format_items_for_display(&individual_items);
+                println!("👜 You found: {}", formatted_display);
+                
+                for item in individual_items {
+                    inventory.add_item(&item);
+                }
+                
+                inventory.save_after_pickup();
+            }
+        } else {
+            println!("🚨 Caught! The NPC noticed you and calls for guards!");
+        }
     }
 }
 
