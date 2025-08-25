@@ -3,6 +3,8 @@ pub mod loot;
 pub mod actions;
 pub mod ui;
 pub mod rng;
+#[cfg(feature = "wasm")]
+pub mod wasm_api;
 
 pub use ui::{print_event_summary, print_simple_header};
 

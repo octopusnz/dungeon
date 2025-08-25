@@ -1,4 +1,4 @@
-use dungeon::{inventory::Inventory, loot::parse_and_format_loot_cached, apply_pickpocket_penalty, actions::{TAVERN_DRINK_COST_SP, TAVERN_FOOD_COST_SP, TAVERN_STAY_COST_GP, TAVERN_TIP_COST_GP, TAVERN_FLIRT_COST_GP}};
+use dungeon_core::{inventory::Inventory, loot::parse_and_format_loot_cached, apply_pickpocket_penalty, actions::{TAVERN_DRINK_COST_SP, TAVERN_FOOD_COST_SP, TAVERN_STAY_COST_GP, TAVERN_TIP_COST_GP, TAVERN_FLIRT_COST_GP}};
 
 // Local lightweight harness (mirrors earlier inline tests)
 #[derive(Debug)]

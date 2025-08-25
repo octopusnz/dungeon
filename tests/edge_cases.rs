@@ -1,4 +1,4 @@
-use dungeon::{inventory::{Inventory, format_cp}, loot::parse_loot_into_items, apply_pickpocket_penalty, actions::{TAVERN_TIP_COST_GP}};
+use dungeon_core::{inventory::{Inventory, format_cp}, loot::parse_loot_into_items, apply_pickpocket_penalty, actions::{TAVERN_TIP_COST_GP}};
 
 // Helper harness snippet for tavern tip logic (non-interactive)
 fn simulate_tip(inventory: &mut Inventory, luck_roll_success: bool) -> bool {

@@ -1,4 +1,4 @@
-use dungeon::{loot::parse_and_format_loot_cached, apply_pickpocket_penalty};
+use dungeon_core::{loot::parse_and_format_loot_cached, apply_pickpocket_penalty};
 
 #[test]
 fn penalty_zero_gold() {

@@ -1,0 +1,34 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><title>Dungeon WASM</title><meta name="viewport" content="width=device-width,initial-scale=1"/><style>body{font-family:system-ui,Arial,sans-serif;background:#111;color:#eee;padding:1rem;}button, input, textarea{margin:.25rem;padding:.5rem .75rem;}button{cursor:pointer;}#log{white-space:pre-wrap;background:#222;padding:1rem;border-radius:6px;min-height:140px;max-height:260px;overflow:auto;} .inv-item{display:inline-block;margin:2px 4px;padding:2px 6px;background:#333;border-radius:4px;font-size:.75rem;} .currency{margin-top:.5rem;font-weight:600;} fieldset{border:1px solid #333;border-radius:6px;margin-top:1rem;} legend{padding:0 .5rem;} label.inline{font-size:.8rem;margin-right:.75rem;} </style></head><body><h1>Dungeon (WASM)</h1><p>Browser demo of core mechanics. Enter loot / simulate encounters / shop purchases.</p>
+<fieldset><legend>Loot & Penalty</legend>
+	<input id="loot" placeholder="e.g. 3 gp and a silver ring" size=40 />
+	<button id="addLoot">Add Loot</button>
+	<button id="penalty">Apply 7% Penalty</button>
+</fieldset>
+<fieldset><legend>Pickpocket</legend>
+	<input id="ppLoot" placeholder="Pipe separated loot options e.g. 5 gp and a ruby|2 sp and a torch" size=60 />
+	<button id="pickpocket">Pickpocket</button>
+</fieldset>
+<fieldset><legend>Fight</legend>
+	<button id="fight">Fight Monster</button>
+</fieldset>
+<fieldset><legend>Shop Purchase (Simulation)</legend>
+	<textarea id="shopItems" rows=2 cols=60 placeholder="Items to buy pipe separated. Optional :rarity. Example: Potion of Healing:Uncommon|Orb Shard:Legendary"></textarea><br/>
+	<label class="inline"><input type="checkbox" id="shopHaggle"/> Attempt Haggle</label>
+	<label class="inline"><input type="checkbox" id="shopLuck"/> Spend Luck (if stored)</label>
+	<button id="shopBuy">Sim Buy</button>
+</fieldset>
+<h2>Inventory</h2><div id="inv"></div><h3>Log</h3><div id="log"></div><script type="module">import init, { Game } from './pkg/dungeon_core.js';
+const logEl = document.getElementById('log');
+const invEl = document.getElementById('inv');
+const lootInput = document.getElementById('loot');
+let game; function render(state){ invEl.innerHTML=''; state.items.forEach(i=>{ const span=document.createElement('span'); span.className='inv-item'; span.textContent=i; invEl.appendChild(span); }); const cur=document.createElement('div'); cur.className='currency'; cur.textContent=`Gold: ${state.gp}  Silver: ${state.sp}  Copper: ${state.cp}  Luck:${state.luck?'Yes':'No'}`; invEl.appendChild(cur); }
+function log(m){ const ts=new Date().toLocaleTimeString(); logEl.textContent+=`[${ts}] ${m}\n`; logEl.scrollTop=logEl.scrollHeight; }
+function state(){ return game.get_state(); }
+async function main(){ await init(); game=new Game(); render(state());
+	document.getElementById('addLoot').onclick=()=>{ const d=lootInput.value.trim(); if(!d) return; const st=game.add_loot(d); render(st); log('Added loot: '+d); lootInput.value=''; };
+	document.getElementById('penalty').onclick=()=>{ const st=game.apply_penalty(7); render(st); log('Applied 7% penalty'); };
+	document.getElementById('pickpocket').onclick=()=>{ const desc=document.getElementById('ppLoot').value.trim(); if(!desc) return; const st=game.pickpocket(desc); render(st); log('Pickpocket attempt with options: '+desc); };
+	document.getElementById('fight').onclick=()=>{ const st=game.fight(); render(st); log('Fought a monster.'); };
+	document.getElementById('shopBuy').onclick=()=>{ const items=document.getElementById('shopItems').value.trim(); if(!items) return; const haggle=document.getElementById('shopHaggle').checked; const luck=document.getElementById('shopLuck').checked; const st=game.shop_buy(items, haggle, luck); render(st); log(`Shop buy: items='${items}' haggle=${haggle} luck=${luck}`); };
+}
+main();</script></body></html>

@@ -1,5 +1,5 @@
 // Clean minimal entrypoint (legacy code moved into library modules)
-use dungeon::{inventory::{Inventory, SAVE_FILE}, ui::{prompt_main_action, MainAction}, actions::{pick_pocket, visit_shop, fight_monster, visit_tavern}};
+use dungeon_core::{inventory::{Inventory, SAVE_FILE}, ui::{prompt_main_action, MainAction}, actions::{pick_pocket, visit_shop, fight_monster, visit_tavern}};
 use std::fs;
 use std::env;
 

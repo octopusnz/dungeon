@@ -1,10 +1,10 @@
-use rand::prelude::IndexedRandom;
-use rand::Rng;
 use rand::seq::SliceRandom;
-use crate::inventory::{Inventory, format_cp};
+use rand::Rng;
+use crate::inventory::Inventory;
+#[cfg(feature = "cli")] use crate::inventory::format_cp;
 use crate::loot::{parse_and_format_loot_cached, currency_regex};
 use crate::rng::with_rng;
-use dialoguer::{MultiSelect, Confirm, Select};
+#[cfg(feature = "cli")] use dialoguer::{MultiSelect, Confirm, Select};
 
 // Probabilities
 pub const EVENT_CHANCE: f64 = 0.05;
@@ -28,11 +28,11 @@ pub fn pick_pocket(inv: &mut Inventory, loot_items: &[String]) {
     let mut narrative: Vec<String> = Vec::with_capacity(2);
     let mut title = String::from("Pickpocket");
     let boosted = inv.luck_boost; let event_chance = if boosted { 0.90 } else { EVENT_CHANCE };
-    if with_rng(|r| r.random_bool(event_chance)) {
+    if with_rng(|r| r.gen_bool(event_chance)) {
         title = "Mysterious Figure".into();
         narrative.push("A mysterious figure emerges from the shadows...".into());
         inv.add_item("1000 gp");
-    } else if with_rng(|r| r.random_bool(PICKPOCKET_SUCCESS)) {
+    } else if with_rng(|r| r.gen_bool(PICKPOCKET_SUCCESS)) {
         if let Some(desc) = with_rng(|r| loot_items.choose(r).cloned()) {
             let (items, formatted) = parse_and_format_loot_cached(&desc);
             title = "Successful Pickpocket".into();
@@ -45,7 +45,7 @@ pub fn pick_pocket(inv: &mut Inventory, loot_items: &[String]) {
         }
     } else {
         title = "Caught Pickpocketing".into();
-        let loss_percent = with_rng(|r| r.random_range(5..=10));
+    let loss_percent = with_rng(|r| r.gen_range(5..=11)); // inclusive upper bound mimic 5..=10
         let loss = crate::apply_pickpocket_penalty(&mut inv.gold_pieces, loss_percent);
         narrative.push(if loss>0 { format!("You drop {} gold pieces ({}%) while fleeing!", loss, loss_percent) } else { "Luckily you carried no gold.".into() });
     }
@@ -69,7 +69,7 @@ pub fn fight_monster(inv: &mut Inventory) {
     println!("⚔️  A wild {} (strength {}) appears!", monster.name, monster.strength);
     let success_chance = (0.85_f64 - (monster.strength as f64 * 0.07)).max(0.05);
     println!("🧮 Success chance: {:>2}%", (success_chance * 100.0).round() as u32);
-    let success = with_rng(|r| r.random_bool(success_chance));
+    let success = with_rng(|r| r.gen_bool(success_chance));
     let before = inv.clone();
     if success {
         let (min_gp, max_gp) = {
@@ -77,7 +77,7 @@ pub fn fight_monster(inv: &mut Inventory) {
             let max_gp = (50 * monster.strength as u32).min(500).max(min_gp + 5);
             (min_gp, max_gp)
         };
-        let reward = with_rng(|r| r.random_range(min_gp..=max_gp));
+    let reward = with_rng(|r| r.gen_range(min_gp..=max_gp));
         inv.gold_pieces = inv.gold_pieces.saturating_add(reward);
         inv.save_after_pickup();
         crate::print_event_summary("Victory", &before, inv, &[], &[]);
@@ -89,7 +89,7 @@ pub fn fight_monster(inv: &mut Inventory) {
             println!("😣 You were defeated by the {}, but had no gold.", monster.name);
             return;
         }
-        let loss_percent = with_rng(|r| r.random_range(5..=10));
+    let loss_percent = with_rng(|r| r.gen_range(5..=10));
         let loss = ((inv.gold_pieces as f64) * (loss_percent as f64 / 100.0)).round() as u32;
         let loss = loss.clamp(1, inv.gold_pieces);
         inv.gold_pieces -= loss;
@@ -102,24 +102,25 @@ pub fn fight_monster(inv: &mut Inventory) {
 pub const HAGGLE_SUCCESS_CHANCE: f64 = 0.50; // 50% default base chance
 
 #[derive(Clone, Copy, Debug)]
-enum Rarity { Common, Uncommon, Rare, Epic, Legendary }
+pub enum Rarity { Common, Uncommon, Rare, Epic, Legendary }
 
 impl Rarity {
-    fn price_range_cp(&self) -> std::ops::RangeInclusive<u32> {
+    // Public so that when cli feature is disabled (wasm-only build) these are considered externally usable
+    pub fn price_range_cp(&self) -> std::ops::RangeInclusive<u32> {
         match self {
-            // Ranges constrained to overall 5cp .. 500gp (5 .. 50000 cp)
-            Rarity::Common => 5..=50,             // 5cp - 5sp
-            Rarity::Uncommon => 50..=500,         // 5sp - 5gp
-            Rarity::Rare => 500..=5_000,          // 5gp - 50gp
-            Rarity::Epic => 5_000..=20_000,       // 50gp - 200gp
-            Rarity::Legendary => 20_000..=50_000, // 200gp - 500gp
+            Rarity::Common => 5..=50,
+            Rarity::Uncommon => 50..=500,
+            Rarity::Rare => 500..=5_000,
+            Rarity::Epic => 5_000..=20_000,
+            Rarity::Legendary => 20_000..=50_000,
         }
     }
-    fn label(&self) -> &'static str {
+    pub fn label(&self) -> &'static str {
         match self { Rarity::Common=>"Common", Rarity::Uncommon=>"Uncommon", Rarity::Rare=>"Rare", Rarity::Epic=>"Epic", Rarity::Legendary=>"Legendary" }
     }
 }
 
+#[cfg(feature = "cli")]
 pub fn visit_shop(inv: &mut Inventory) {
     loop {
         crate::print_simple_header("Shop");
@@ -138,9 +139,10 @@ pub fn visit_shop(inv: &mut Inventory) {
     }
 }
 
+#[cfg(feature = "cli")]
 fn sell_items(inv: &mut Inventory) {
     if inv.items.is_empty() { return; }
-    let prices_cp: Vec<u32> = with_rng(|r| inv.items.iter().map(|_| r.random_range(30..=1000)).collect());
+    let prices_cp: Vec<u32> = with_rng(|r| inv.items.iter().map(|_| r.gen_range(30..=1000)).collect());
     let display: Vec<String> = inv.items.iter().zip(&prices_cp).map(|(it,p)| format!("{} (offers {})", it, format_cp(*p))).collect();
     println!("Select items to sell:");
     let selections = MultiSelect::new().items(&display).interact();
@@ -157,6 +159,7 @@ fn sell_items(inv: &mut Inventory) {
     println!("✅ Sold {} item(s).", removed.len());
 }
 
+#[cfg(feature = "cli")]
 fn buy_items(inv: &mut Inventory) {
     // Stock generation (fresh each visit to Buy screen) with rarity tiers
     const STOCK: &[(&str, Rarity)] = &[
@@ -174,14 +177,14 @@ fn buy_items(inv: &mut Inventory) {
     // Shuffle and take slice
     let mut pool: Vec<(&str, Rarity)> = STOCK.to_vec();
     with_rng(|r| pool.shuffle(r));
-    let stock_count = with_rng(|r| r.random_range(6..=10).min(pool.len() as u32)) as usize;
+    let stock_count = with_rng(|r| r.gen_range(6..=10).min(pool.len() as u32)) as usize;
     let stock: Vec<(&str, Rarity)> = pool.into_iter().take(stock_count).collect();
     // Generate prices per rarity
     let prices_cp: Vec<u32> = with_rng(|r| {
         stock.iter().map(|(_, rar)| {
             let range = rar.price_range_cp();
             // Weight slightly toward lower end by sampling two and taking min for higher rarities
-            let sample = |r: &mut rand::rngs::SmallRng| r.random_range(*range.start()..=*range.end());
+            let sample = |r: &mut rand::rngs::SmallRng| r.gen_range(*range.start()..=*range.end());
             match rar { Rarity::Epic | Rarity::Legendary => sample(r).min(sample(r)), _ => sample(r) }
         }).collect()
     });
@@ -198,7 +201,7 @@ fn buy_items(inv: &mut Inventory) {
     if Confirm::new().with_prompt("Attempt to haggle? (-25% success, +10% failure)").default(false).interact().unwrap_or(false) {
         let mut success_chance = HAGGLE_SUCCESS_CHANCE;
         if inv.luck_boost { success_chance = 0.85; }
-        let success = with_rng(|r| r.random_bool(success_chance));
+    let success = with_rng(|r| r.gen_bool(success_chance));
         if success { final_cp = ((final_cp as f64) * 0.75).round() as u32; println!("🤑 Haggle success! New price: {} (chance {:.0}%)", format_cp(final_cp), success_chance*100.0); }
         else { final_cp = ((final_cp as f64) * 1.10).round() as u32; println!("😬 Haggle failed. Merchant raises price to {} (chance {:.0}%)", format_cp(final_cp), success_chance*100.0); }
         if inv.luck_boost { inv.luck_boost = false; println!("✨ Your stored luck is spent in the negotiation."); }
@@ -215,6 +218,7 @@ fn buy_items(inv: &mut Inventory) {
     println!("✅ Purchased {} item(s).", added.len());
 }
 
+#[cfg(feature = "cli")]
 pub fn visit_tavern(inv: &mut Inventory) {
     loop {
         let options = vec![
@@ -231,6 +235,7 @@ pub fn visit_tavern(inv: &mut Inventory) {
     }
 }
 
+#[cfg(feature = "cli")]
 fn buy_drink(inv: &mut Inventory) {
     println!("Drink costs {} ({} sp).", format_cp(TAVERN_DRINK_COST_SP * 10), TAVERN_DRINK_COST_SP);
     if !Confirm::new().with_prompt("Buy drink?").default(true).interact().unwrap_or(false) { return; }
@@ -239,6 +244,7 @@ fn buy_drink(inv: &mut Inventory) {
     inv.save_after_pickup();
 }
 
+#[cfg(feature = "cli")]
 fn buy_food(inv: &mut Inventory) {
     println!("Food costs {} ({} sp).", format_cp(TAVERN_FOOD_COST_SP * 10), TAVERN_FOOD_COST_SP);
     if !Confirm::new().with_prompt("Buy food?").default(true).interact().unwrap_or(false) { return; }
@@ -247,6 +253,7 @@ fn buy_food(inv: &mut Inventory) {
     inv.save_after_pickup();
 }
 
+#[cfg(feature = "cli")]
 fn stay_night(inv: &mut Inventory) {
     println!("Room costs {} ({} gp).", format_cp(TAVERN_STAY_COST_GP * 100), TAVERN_STAY_COST_GP);
     if !Confirm::new().with_prompt("Pay for room?").default(true).interact().unwrap_or(false) { return; }
@@ -255,6 +262,7 @@ fn stay_night(inv: &mut Inventory) {
     inv.save_after_pickup();
 }
 
+#[cfg(feature = "cli")]
 fn tip_bartender(inv: &mut Inventory) {
     if inv.luck_boost { println!("Luck already stored."); return; }
     println!(
@@ -265,18 +273,18 @@ fn tip_bartender(inv: &mut Inventory) {
     );
     if !Confirm::new().with_prompt("Leave tip?").default(true).interact().unwrap_or(false) { return; }
     if !inv.try_spend_cp(TAVERN_TIP_COST_GP * 100) { println!("Need more gold."); return; }
-    if with_rng(|r| r.random_bool(TAVERN_LUCK_CHANCE)) {
+    if with_rng(|r| r.gen_bool(TAVERN_LUCK_CHANCE)) {
         inv.luck_boost = true; println!("🍀 Luck boon gained for next pickpocket.");
     } else { println!("🍂 No luck this time."); }
     inv.save_after_pickup();
 }
 
+#[cfg(feature = "cli")]
 fn flirt_barmaid(inv: &mut Inventory) {
-    use dialoguer::Confirm;
     println!("Flirting costs {} ({} gp).", format_cp(TAVERN_FLIRT_COST_GP * 100), TAVERN_FLIRT_COST_GP);
     if !Confirm::new().with_prompt("Attempt to flirt?").default(true).interact().unwrap_or(false) { return; }
     if !inv.try_spend_cp(TAVERN_FLIRT_COST_GP * 100) { println!("You can't afford her attention right now."); return; }
-    if with_rng(|r| r.random_bool(TAVERN_FLIRT_KISS_CHANCE)) {
+    if with_rng(|r| r.gen_bool(TAVERN_FLIRT_KISS_CHANCE)) {
         if !inv.luck_boost { inv.luck_boost = true; println!("💋 The barmaid gives you a quick kiss. You feel luck swirling for your next pickpocket."); }
         else { println!("💋 Another quick kiss, though you already feel lucky."); }
     } else { println!("🙂 She laughs and shakes her head politely. Maybe next time."); }
