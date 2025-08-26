@@ -23,10 +23,11 @@ jobs:
     outputs:
       build_wasm: ${{ steps.detect_changes.outputs.build }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 1
-      - name: Detect relevant changes (Rust only: src/, Cargo.toml/lock)
+          fetch-depth: 2
+      - name: Detect relevant Rust changes (src/ or Cargo manifest modified)
         id: detect_changes
         run: |
           set -euo pipefail
@@ -37,13 +38,13 @@ jobs:
           fi
           if [ -z "$base" ]; then
             echo "No base commit (initial or force push); forcing build"; echo "build=1" >> "$GITHUB_OUTPUT"; exit 0; fi
-          echo "Diff base: $base -> HEAD";
+          echo "Diff base: $base -> HEAD"
           changed=$(git diff --name-only "$base" HEAD)
           printf '%s\n' "$changed" | sed 's/^/CHANGED: /'
           if printf '%s\n' "$changed" | grep -E '^(src/|Cargo.toml|Cargo.lock)' >/dev/null; then
-            echo "Relevant Rust changes detected -> build wasm"; echo "build=1" >> "$GITHUB_OUTPUT";
+            echo "Relevant Rust changes detected -> build wasm"; echo "build=1" >> "$GITHUB_OUTPUT"
           else
-            echo "No relevant Rust changes -> skip wasm build"; echo "build=0" >> "$GITHUB_OUTPUT";
+            echo "No relevant Rust changes -> skip wasm build"; echo "build=0" >> "$GITHUB_OUTPUT"
           fi
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
@@ -111,7 +112,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 2
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -200,7 +201,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 2
       - name: Verify static web assets
         run: |
           test -f web/index.html || { echo 'index.html missing'; exit 1; }
