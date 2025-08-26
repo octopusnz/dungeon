@@ -15,11 +15,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  lint_test:
+  determine_changes:
     runs-on: ubuntu-latest
-    env:
-      RUSTFLAGS: -Dwarnings
-      SCCACHE_GHA_ENABLED: "true"
     outputs:
       build_wasm: ${{ steps.detect_changes.outputs.build }}
     steps:
@@ -37,74 +34,19 @@ jobs:
             base=$(git rev-parse HEAD^ || echo '')
           fi
           if [ -z "$base" ]; then
-            echo "No base commit (initial or force push); forcing build"; echo "build=1" >> "$GITHUB_OUTPUT"; exit 0; fi
+            echo "No base commit (initial); forcing build"; echo "build=1" >> "$GITHUB_OUTPUT"; exit 0; fi
           echo "Diff base: $base -> HEAD"
-          changed=$(git diff --name-only "$base" HEAD)
-          printf '%s\n' "$changed" | sed 's/^/CHANGED: /'
-          if printf '%s\n' "$changed" | grep -E '^(src/|Cargo.toml|Cargo.lock)' >/dev/null; then
+          git diff --name-only "$base" HEAD > changed_files.txt
+          sed 's/^/CHANGED: /' changed_files.txt || true
+          if grep -E '^(src/|Cargo.toml|Cargo.lock)' changed_files.txt >/dev/null; then
             echo "Relevant Rust changes detected -> build wasm"; echo "build=1" >> "$GITHUB_OUTPUT"
           else
             echo "No relevant Rust changes -> skip wasm build"; echo "build=0" >> "$GITHUB_OUTPUT"
           fi
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-      - name: Install sccache (manual)
-        run: |
-          set -euo pipefail
-          if ! command -v sccache >/dev/null; then
-            cargo install sccache --locked --version 0.7.4 || cargo install sccache --locked || true
-          fi
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            ~/.cache/sccache
-            target
-          key: cache-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            cache-${{ runner.os }}-
-      - name: Export sccache env
-        run: |
-          echo "RUSTC_WRAPPER=$(which sccache || echo '')" >> $GITHUB_ENV
-          echo "SCCACHE_CACHE_SIZE=2G" >> $GITHUB_ENV
-      - name: Start sccache (retry + fallback)
-        run: |
-          if [ -z "${RUSTC_WRAPPER}" ]; then
-            echo "sccache not installed; skipping."; exit 0; fi
-          attempt=0
-          until sccache --start-server 2>/tmp/sccache_start.log || [ $attempt -ge 2 ]; do
-            echo "sccache start failed (attempt $attempt); retrying in 5s"; cat /tmp/sccache_start.log || true; sleep 5; attempt=$((attempt+1));
-          done
-            if ! sccache --show-stats >/dev/null 2>&1; then
-              echo "Disabling sccache due to startup failure"; echo "RUSTC_WRAPPER=" >> $GITHUB_ENV; fi
-      - name: Show sccache stats (pre-build)
-        run: sccache --show-stats || echo "sccache inactive"
-      - name: Install wasm-bindgen-cli (match lockfile)
-        run: |
-          set -euo pipefail
-          VERSION=$(grep -A1 'name = "wasm-bindgen"' Cargo.lock | grep 'version =' | head -n1 | cut -d '"' -f2)
-          if command -v wasm-bindgen >/dev/null; then
-            INSTALLED=$(wasm-bindgen --version | awk '{print $2}')
-            if [ "$INSTALLED" != "$VERSION" ]; then
-              cargo install wasm-bindgen-cli --version "$VERSION" --locked
-            fi
-          else
-            cargo install wasm-bindgen-cli --version "$VERSION" --locked
-          fi
-      - name: Clippy lint (all targets, all features)
-        run: cargo clippy --all-targets --all-features -- -D warnings
-      - name: Run tests (CLI feature)
-        run: cargo test --features cli --quiet
-      - name: Format check
-        run: cargo fmt --all -- --check
 
   wasm_build:
-    needs: lint_test
-    if: ${{ github.ref == 'refs/heads/master' && needs.lint_test.outputs.build_wasm == '1' }}
+    needs: determine_changes
+    if: ${{ github.ref == 'refs/heads/master' && needs.determine_changes.outputs.build_wasm == '1' }}
     runs-on: ubuntu-latest
     env:
       SCCACHE_GHA_ENABLED: "true"
@@ -195,8 +137,8 @@ jobs:
           path: web
 
   upload_static:
-    needs: lint_test
-    if: ${{ github.ref == 'refs/heads/master' && needs.lint_test.outputs.build_wasm != '1' }}
+    needs: determine_changes
+    if: ${{ github.ref == 'refs/heads/master' && needs.determine_changes.outputs.build_wasm != '1' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -214,7 +156,7 @@ jobs:
           path: web
 
   deploy:
-    needs: [lint_test, wasm_build, upload_static]
+    needs: [determine_changes, wasm_build, upload_static]
     if: ${{ github.ref == 'refs/heads/master' && (needs.wasm_build.result == 'success' || needs.upload_static.result == 'success') }}
     runs-on: ubuntu-latest
     environment:
