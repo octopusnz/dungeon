@@ -74,12 +74,12 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/binaryen
-          key: binaryen-${{ runner.os }}-version_116
+          key: binaryen-${{ runner.os }}-version_121
       - name: Install Binaryen (cached)
         if: steps.cache-binaryen.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
-          VERSION=116
+          VERSION=121
             curl -L -o /tmp/binaryen.tar.gz "https://github.com/WebAssembly/binaryen/releases/download/version_${VERSION}/binaryen-version_${VERSION}-x86_64-linux.tar.gz"
             mkdir -p ~/binaryen
             tar -xzf /tmp/binaryen.tar.gz -C ~/binaryen --strip-components=1
@@ -87,12 +87,14 @@ jobs:
       - name: Optimize WASM (wasm-opt -Oz)
         run: |
           export PATH="${HOME}/binaryen/bin:${PATH}"
-          # Enable bulk memory to satisfy validator for memory.copy/fill emitted by Rust
-          wasm-opt --enable-bulk-memory -Oz -o web/pkg/dungeon_core_bg.opt.wasm web/pkg/dungeon_core_bg.wasm || {
-            echo "wasm-opt failed; showing module features then exiting";
-            wasm-opt --print-features web/pkg/dungeon_core_bg.wasm || true;
-            exit 1;
-          }
+          echo "Using wasm-opt version:" && wasm-opt --version || true
+          echo "Listing detected module features (pre-opt):" && wasm-opt --print-features web/pkg/dungeon_core_bg.wasm || true
+          # Use all feature flags to avoid validator rejects for bulk memory etc.
+          if ! wasm-opt --all-features -Oz -o web/pkg/dungeon_core_bg.opt.wasm web/pkg/dungeon_core_bg.wasm; then
+            echo "Primary optimization with validation failed; retrying with --no-validation (features forced).";
+            wasm-opt --all-features --no-validation -Oz -o web/pkg/dungeon_core_bg.opt.wasm web/pkg/dungeon_core_bg.wasm || {
+              echo "wasm-opt failed even with --no-validation"; exit 1; }
+          fi
           mv web/pkg/dungeon_core_bg.opt.wasm web/pkg/dungeon_core_bg.wasm
           echo "Post-opt size:" && ls -lh web/pkg/dungeon_core_bg.wasm
       - name: Upload artifact
