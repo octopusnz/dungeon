@@ -87,7 +87,12 @@ jobs:
       - name: Optimize WASM (wasm-opt -Oz)
         run: |
           export PATH="${HOME}/binaryen/bin:${PATH}"
-          wasm-opt -Oz -o web/pkg/dungeon_core_bg.opt.wasm web/pkg/dungeon_core_bg.wasm
+          # Enable bulk memory to satisfy validator for memory.copy/fill emitted by Rust
+          wasm-opt --enable-bulk-memory -Oz -o web/pkg/dungeon_core_bg.opt.wasm web/pkg/dungeon_core_bg.wasm || {
+            echo "wasm-opt failed; showing module features then exiting";
+            wasm-opt --print-features web/pkg/dungeon_core_bg.wasm || true;
+            exit 1;
+          }
           mv web/pkg/dungeon_core_bg.opt.wasm web/pkg/dungeon_core_bg.wasm
           echo "Post-opt size:" && ls -lh web/pkg/dungeon_core_bg.wasm
       - name: Upload artifact
