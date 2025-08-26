@@ -49,7 +49,6 @@ jobs:
     if: ${{ github.ref == 'refs/heads/master' && needs.determine_changes.outputs.build_wasm == '1' }}
     runs-on: ubuntu-latest
     env:
-      SCCACHE_GHA_ENABLED: "true"
       RUSTFLAGS: -C debuginfo=0
     steps:
       - uses: actions/checkout@v4
@@ -65,22 +64,10 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            ~/.cache/sccache
             target
           key: cache-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             cache-${{ runner.os }}-
-      - name: Install sccache (manual)
-        run: |
-          set -euo pipefail
-          if ! command -v sccache >/dev/null; then
-            cargo install sccache --locked --version 0.7.4 || cargo install sccache --locked || true
-          fi
-          echo "RUSTC_WRAPPER=$(which sccache || echo '')" >> $GITHUB_ENV
-          echo "SCCACHE_CACHE_SIZE=2G" >> $GITHUB_ENV
-          if [ -n "$(which sccache || true)" ]; then sccache --start-server || true; fi
-      - name: Show sccache stats (pre-build)
-        run: sccache --show-stats || echo "sccache inactive"
       - name: Install wasm-bindgen-cli (match lockfile)
         run: |
           set -euo pipefail
@@ -102,7 +89,6 @@ jobs:
           touch web/.nojekyll
           test -f web/index.html || { echo 'index.html missing in web/'; exit 1; }
           test -f web/pkg/dungeon_core_bg.wasm || { echo 'wasm-bindgen output missing'; ls -R web/pkg; exit 1; }
-          if command -v sccache >/dev/null; then sccache --show-stats || true; fi
       - name: Cache Binaryen
         id: cache-binaryen
         uses: actions/cache@v4
