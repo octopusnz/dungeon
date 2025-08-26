@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+#[cfg(any(feature = "cli", test))]
 use std::fs;
 
 pub const SAVE_FILE: &str = "inventory.json"; // Exposed so CLI reset flag can remove the file
@@ -74,11 +75,15 @@ impl Inventory {
     }
 
     pub fn save_after_pickup(&mut self) {
-        if let Err(e) = self.save() {
-            println!("⚠️  Failed to save inventory: {}", e);
+        #[cfg(any(feature = "cli", test))]
+        {
+            if let Err(e) = self.save() {
+                println!("⚠️  Failed to save inventory: {}", e);
+            }
         }
+        // wasm-only build: no-op (avoid fs dependency / size)
     }
-
+    #[cfg(feature = "cli")]
     pub fn show(&self) {
         let has_items = !self.items.is_empty();
         let has_currency = self.copper_pieces > 0 || self.silver_pieces > 0 || self.gold_pieces > 0;
@@ -109,13 +114,19 @@ impl Inventory {
         }
     }
 
+    #[cfg(any(feature = "cli", test))]
     pub fn save(&self) -> Result<(), Box<dyn std::error::Error>> {
         fs::write(SAVE_FILE, serde_json::to_string_pretty(self)?)?;
         Ok(())
     }
+    #[cfg(any(feature = "cli", test))]
     pub fn load() -> Result<Self, Box<dyn std::error::Error>> {
         Ok(serde_json::from_str(&std::fs::read_to_string(SAVE_FILE)?)?)
     }
+    #[cfg(all(feature = "wasm", not(feature = "cli"), not(test)))]
+    pub fn save(&self) -> Result<(), Box<dyn std::error::Error>> { Ok(()) }
+    #[cfg(all(feature = "wasm", not(feature = "cli"), not(test)))]
+    pub fn load() -> Result<Self, Box<dyn std::error::Error>> { Ok(Self::new()) }
 }
 
 impl Default for Inventory {

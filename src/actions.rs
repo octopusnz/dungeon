@@ -85,7 +85,6 @@ pub fn fight_monster_outcome(inv: &mut Inventory) -> FightOutcome {
     let monster = with_rng(|r| *MONSTERS.choose(r).unwrap());
     let success_chance = (0.85_f64 - (monster.strength as f64 * 0.07)).max(0.05);
     let success = with_rng(|r| r.gen_bool(success_chance));
-    let before = inv.clone();
     if success {
         let (min_gp, max_gp) = {
             let min_gp = (20 * (monster.strength as u32).max(1) / 2).max(10);
@@ -115,7 +114,6 @@ pub fn fight_monster_outcome(inv: &mut Inventory) -> FightOutcome {
         let loss = loss.clamp(1, inv.gold_pieces);
         inv.gold_pieces -= loss;
         inv.save_after_pickup();
-        let _ = before; // silence if not used elsewhere
         FightOutcome {
             monster: monster.name,
             victory: false,
