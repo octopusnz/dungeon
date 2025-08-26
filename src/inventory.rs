@@ -12,6 +12,11 @@ pub struct Inventory {
     pub gold_pieces: u32,
     #[serde(default)]
     pub luck_boost: bool,
+    // Player hit points (persistent across fights). Added later; older saves default to 0 and are normalized on load/new.
+    #[serde(default)]
+    pub max_hp: u32,
+    #[serde(default)]
+    pub current_hp: u32,
 }
 
 impl Inventory {
@@ -22,6 +27,8 @@ impl Inventory {
             silver_pieces: 0,
             gold_pieces: 0,
             luck_boost: false,
+            max_hp: 20,
+            current_hp: 20,
         }
     }
 
@@ -121,7 +128,10 @@ impl Inventory {
     }
     #[cfg(any(feature = "cli", test))]
     pub fn load() -> Result<Self, Box<dyn std::error::Error>> {
-        Ok(serde_json::from_str(&std::fs::read_to_string(SAVE_FILE)?)?)
+    let mut inv: Self = serde_json::from_str(&std::fs::read_to_string(SAVE_FILE)?)?;
+    if inv.max_hp == 0 { inv.max_hp = 20; }
+    if inv.current_hp == 0 || inv.current_hp > inv.max_hp { inv.current_hp = inv.max_hp; }
+    Ok(inv)
     }
     #[cfg(all(feature = "wasm", not(feature = "cli"), not(test)))]
     pub fn save(&self) -> Result<(), Box<dyn std::error::Error>> {
@@ -129,7 +139,7 @@ impl Inventory {
     }
     #[cfg(all(feature = "wasm", not(feature = "cli"), not(test)))]
     pub fn load() -> Result<Self, Box<dyn std::error::Error>> {
-        Ok(Self::new())
+    Ok(Self::new())
     }
 }
 

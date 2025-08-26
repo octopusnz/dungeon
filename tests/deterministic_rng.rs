@@ -2,7 +2,7 @@ use dungeon_core::{
     actions::{Rarity, fight_monster_outcome, pick_pocket},
     inventory::Inventory,
     rng::reseed,
-};
+}; // FightOutcome now includes hp fields; test still focuses on reward/loss determinism
 
 // Helper to run pick_pocket deterministically and return inventory diff
 fn run_pick(inv: &mut Inventory, loot: &[&str]) {

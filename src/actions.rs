@@ -24,7 +24,15 @@ pub const TAVERN_FLIRT_KISS_CHANCE: f64 = 0.05; // 5% chance to gain luck via ki
 #[derive(Clone, Copy)]
 pub struct Monster {
     pub name: &'static str,
-    pub strength: u8,
+    pub strength: u8,  // influences hp & damage
+}
+
+impl Monster {
+    pub fn max_hp(&self) -> u32 { 5 + (self.strength as u32 * 5) }
+    pub fn damage_range(&self) -> std::ops::RangeInclusive<u32> {
+        let base = self.strength as u32;
+    base..=base+4
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -33,8 +41,11 @@ pub struct FightOutcome {
     pub victory: bool,
     pub reward_gp: u32,
     pub loss_gp: u32,
+    pub player_hp_end: u32,
+    pub monster_hp_end: u32,
 }
 
+// Legacy outcome helper retained for deterministic tests: runs an auto-resolve fight with no fleeing.
 pub fn fight_monster_outcome(inv: &mut Inventory) -> FightOutcome {
     const MONSTERS: &[Monster] = &[
         Monster {
@@ -83,43 +94,45 @@ pub fn fight_monster_outcome(inv: &mut Inventory) -> FightOutcome {
         },
     ];
     let monster = with_rng(|r| *MONSTERS.choose(r).unwrap());
-    let success_chance = (0.85_f64 - (monster.strength as f64 * 0.07)).max(0.05);
-    let success = with_rng(|r| r.gen_bool(success_chance));
-    if success {
-        let (min_gp, max_gp) = {
-            let min_gp = (20 * (monster.strength as u32).max(1) / 2).max(10);
-            let max_gp = (50 * monster.strength as u32).min(500).max(min_gp + 5);
-            (min_gp, max_gp)
-        };
+    // Ensure player hp initialized
+    if inv.max_hp == 0 { inv.max_hp = 20; }
+    if inv.current_hp == 0 || inv.current_hp > inv.max_hp { inv.current_hp = inv.max_hp; }
+    let mut m_hp = monster.max_hp();
+    // Auto-resolve: alternate blows until one drops
+    let mut turn_player = true;
+    while inv.current_hp > 0 && m_hp > 0 {
+        if turn_player {
+            let dmg = with_rng(|r| r.gen_range(2..=6));
+            m_hp = m_hp.saturating_sub(dmg);
+        } else {
+            let dmg = with_rng(|r| r.gen_range(monster.damage_range()));
+            inv.current_hp = inv.current_hp.saturating_sub(dmg);
+        }
+        turn_player = !turn_player;
+    }
+    if m_hp == 0 {
+        let min_gp = (10 * (monster.strength as u32).max(1)).max(5);
+        let max_gp = (40 * monster.strength as u32).min(400).max(min_gp + 5);
         let reward = with_rng(|r| r.gen_range(min_gp..=max_gp));
         inv.gold_pieces = inv.gold_pieces.saturating_add(reward);
         inv.save_after_pickup();
-        FightOutcome {
-            monster: monster.name,
-            victory: true,
-            reward_gp: reward,
-            loss_gp: 0,
-        }
-    } else if inv.gold_pieces == 0 {
-        inv.save_after_pickup();
-        FightOutcome {
-            monster: monster.name,
-            victory: false,
-            reward_gp: 0,
-            loss_gp: 0,
-        }
+        FightOutcome { monster: monster.name, victory: true, reward_gp: reward, loss_gp: 0, player_hp_end: inv.current_hp, monster_hp_end: m_hp }
     } else {
-        let loss_percent = with_rng(|r| r.gen_range(5..=10));
-        let loss = ((inv.gold_pieces as f64) * (loss_percent as f64 / 100.0)).round() as u32;
-        let loss = loss.clamp(1, inv.gold_pieces);
+        // Player defeated: apply new penalty (10% gold, 3 items) and restore hp to full after
+        let before_gp = inv.gold_pieces;
+        let loss = ((before_gp as f64) * 0.10).round() as u32;
+        let loss = loss.clamp(0, inv.gold_pieces);
         inv.gold_pieces -= loss;
-        inv.save_after_pickup();
-        FightOutcome {
-            monster: monster.name,
-            victory: false,
-            reward_gp: 0,
-            loss_gp: loss,
+        // Remove up to 3 random items
+        let mut removed = Vec::new();
+        for _ in 0..3 {
+            if inv.items.is_empty() { break; }
+            let idx = with_rng(|r| r.gen_range(0..inv.items.len()));
+            removed.push(inv.items.remove(idx));
         }
+        inv.current_hp = inv.max_hp; // restore
+        inv.save_after_pickup();
+        FightOutcome { monster: monster.name, victory: false, reward_gp: 0, loss_gp: loss, player_hp_end: inv.current_hp, monster_hp_end: m_hp }
     }
 }
 
@@ -171,30 +184,100 @@ pub fn pick_pocket(inv: &mut Inventory, loot_items: &[String]) {
     }
 }
 
+#[cfg(feature = "cli")]
 pub fn fight_monster(inv: &mut Inventory) {
+    use std::io::{self, Write};
     crate::print_simple_header("Battle");
-    let before = inv.clone();
-    let outcome = fight_monster_outcome(inv);
-    let success_chance_note = "(chance hidden)"; // Already computed inside outcome; keep output terse
-    if outcome.victory {
-        crate::print_event_summary("Victory", &before, inv, &[], &[]);
-        println!(
-            "🏆 You defeated the {}! {}",
-            outcome.monster, success_chance_note
-        );
-        println!("💰 Loot: {} gold pieces", outcome.reward_gp);
-    } else {
-        crate::print_event_summary("Defeat", &before, inv, &[], &[]);
-        if outcome.loss_gp == 0 {
-            println!(
-                "😣 You were defeated by the {}, but had no gold.",
-                outcome.monster
-            );
-        } else {
-            println!(
-                "💀 The {} overpowered you! Lost {} gp.",
-                outcome.monster, outcome.loss_gp
-            );
+    // Pick monster
+    const MONSTERS: &[Monster] = &[
+        Monster { name: "Goblin Sneak", strength: 1 },
+        Monster { name: "Cave Rat", strength: 1 },
+        Monster { name: "Skeleton Guard", strength: 2 },
+        Monster { name: "Orc Marauder", strength: 3 },
+        Monster { name: "Ghoul", strength: 4 },
+        Monster { name: "Ogre Brute", strength: 5 },
+        Monster { name: "Wyvern", strength: 6 },
+        Monster { name: "Vampire Stalker", strength: 7 },
+        Monster { name: "Stone Golem", strength: 8 },
+        Monster { name: "Ancient Lich", strength: 9 },
+        Monster { name: "Dragon Wyrm", strength: 10 },
+    ];
+    let monster = with_rng(|r| *MONSTERS.choose(r).unwrap());
+    if inv.max_hp == 0 { inv.max_hp = 20; }
+    if inv.current_hp == 0 || inv.current_hp > inv.max_hp { inv.current_hp = inv.max_hp; }
+    let mut m_hp = monster.max_hp();
+    println!("⚔️  A {} appears! (HP {} / Damage {:?})", monster.name, m_hp, monster.damage_range());
+    loop {
+        println!("You: {}/{} HP   {}: {} HP", inv.current_hp, inv.max_hp, monster.name, m_hp);
+        print!("[A]ttack, [F]lee, or [Q]uit fight? ");
+        let _ = io::stdout().flush();
+        let mut line = String::new();
+        if io::stdin().read_line(&mut line).is_err() { println!("You hesitate..."); continue; }
+        let action = line.trim().chars().next().unwrap_or('a').to_ascii_lowercase();
+        match action {
+            'a' => {
+                // Player attack
+                let dmg = with_rng(|r| r.gen_range(2..=6));
+                m_hp = m_hp.saturating_sub(dmg);
+                println!("You strike the {} for {} damage!", monster.name, dmg);
+                if m_hp == 0 { println!("You slew the {}!", monster.name); }
+            }
+            'f' => {
+                // Flee penalty: lose random item (1) and 5% gold
+                let before_gold = inv.gold_pieces;
+                let gold_loss = ((before_gold as f64) * 0.05).round() as u32;
+                let gold_loss = gold_loss.clamp(0, inv.gold_pieces);
+                inv.gold_pieces -= gold_loss;
+                let mut removed: Vec<String> = Vec::new();
+                if !inv.items.is_empty() {
+                    let idx = with_rng(|r| r.gen_range(0..inv.items.len()));
+                    removed.push(inv.items.remove(idx));
+                }
+                let before_inv = inv.clone(); // after removal modifications captured below
+                inv.save_after_pickup();
+                crate::print_event_summary("Fled Battle", &before_inv, inv, &[], &removed);
+                println!("You fled, losing {} gp and {} item(s).", gold_loss, removed.len());
+                return;
+            }
+            'q' => { println!("You withdraw from the battle."); return; }
+            _ => { println!("Action not recognized."); continue; }
+        }
+        // Monster turn if still alive
+        if m_hp > 0 {
+            let dmg = with_rng(|r| r.gen_range(monster.damage_range()));
+            inv.current_hp = inv.current_hp.saturating_sub(dmg);
+            println!("The {} hits you for {} damage!", monster.name, dmg);
+        }
+        if m_hp == 0 {
+            // Reward
+            let min_gp = (10 * (monster.strength as u32).max(1)).max(5);
+            let max_gp = (40 * monster.strength as u32).min(400).max(min_gp + 5);
+            let reward = with_rng(|r| r.gen_range(min_gp..=max_gp));
+            let before = inv.clone();
+            inv.gold_pieces = inv.gold_pieces.saturating_add(reward);
+            inv.save_after_pickup();
+            crate::print_event_summary("Victory", &before, inv, &[], &[]);
+            println!("Loot: {} gp", reward);
+            return;
+        } else if inv.current_hp == 0 {
+            println!("You fall unconscious! The {} defeats you...", monster.name);
+            let before = inv.clone();
+            let before_gp = inv.gold_pieces;
+            let loss = ((before_gp as f64) * 0.10).round() as u32;
+            let loss = loss.clamp(0, inv.gold_pieces);
+            inv.gold_pieces -= loss;
+            // Remove up to 3 random items
+            let mut removed = Vec::new();
+            for _ in 0..3 {
+                if inv.items.is_empty() { break; }
+                let idx = with_rng(|r| r.gen_range(0..inv.items.len()));
+                removed.push(inv.items.remove(idx));
+            }
+            inv.current_hp = inv.max_hp; // restore after defeat
+            inv.save_after_pickup();
+            crate::print_event_summary("Defeat", &before, inv, &[], &removed);
+            println!("Lost {} gp and {} item(s).", loss, removed.len());
+            return;
         }
     }
 }

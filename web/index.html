@@ -102,8 +102,15 @@ body.theme-fantasy .blink{display:none}
 			</section>
 			<section class="panel" id="fight-panel" data-title=" FIGHT ">
 				<h2>Fight</h2>
-				<div class="muted">Engage a random foe. Victory grants gold; defeat may cost some.</div>
-				<button id="fight-run" style="margin-top:6px">FIGHT MONSTER</button>
+				<div class="muted" id="fight-desc">Engage a random foe. Victory grants gold; defeat may cost some.</div>
+				<div id="fight-status" class="muted" style="margin-top:4px"></div>
+				<pre id="fight-lines" style="font-size:11px;line-height:1.2;max-height:110px;overflow:auto;margin:4px 0 0 0"></pre>
+				<div class="actions-grid" style="margin-top:6px">
+					<button id="fight-start">START</button>
+					<button id="fight-attack" disabled>ATTACK</button>
+					<button id="fight-flee" disabled>FLEE</button>
+					<button id="fight-quit" disabled>QUIT</button>
+				</div>
 			</section>
 			<section class="panel" id="tavern-panel" data-title=" TAVERN ">
 				<h2>Tavern</h2>
@@ -211,7 +218,36 @@ start();
 el('act-reset').onclick=()=>unwrap(game.reset());
 el('pp-run').onclick=()=>{ unwrap(game.pickpocket("")); };
 // Fight panel
-el('fight-run').onclick=()=>{ unwrap(game.fight()); };
+function renderFight(fs){
+	const status=el('fight-status'); const linesEl=el('fight-lines'); if(!status) return;
+	if(!fs){ status.textContent=''; if(linesEl) linesEl.textContent=''; return; }
+	if(fs.in_fight){
+		status.textContent = `${fs.monster} HP ${fs.monster_hp}/${fs.monster_max_hp} | You ${fs.player_hp}/${fs.player_max_hp}`;
+	} else {
+		status.textContent = fs.message || 'No active fight';
+	}
+	if(linesEl){
+		const existing = linesEl.textContent.split('\n').filter(Boolean);
+		// Append new lines from fs.lines (avoid duplicates if the same turn re-renders)
+		fs.lines.forEach(l=>{ existing.push(l); });
+		// Keep last 30 lines
+		const trimmed = existing.slice(-30);
+		linesEl.textContent = trimmed.join('\n');
+		linesEl.scrollTop = linesEl.scrollHeight;
+	}
+	const inFight=!!fs.in_fight;
+	el('fight-attack').disabled=!inFight;
+	el('fight-flee').disabled=!inFight;
+	el('fight-quit').disabled=!inFight;
+	el('fight-start').disabled=inFight;
+}
+function unwrapFight(res){
+	if(!res) return; renderFight(res); renderState(res.inventory); if(res.message) { log(res.message); updateSceneFromMessage(res.message); }
+}
+el('fight-start').onclick=()=>{ unwrapFight(game.fight_start()); };
+el('fight-attack').onclick=()=>{ unwrapFight(game.fight_attack()); };
+el('fight-flee').onclick=()=>{ unwrapFight(game.fight_flee()); };
+el('fight-quit').onclick=()=>{ unwrapFight(game.fight_quit()); };
 // Shop
 el('act-shop-gen').onclick=()=>{ const res=game.generate_shop(); currentShop = res.items; buildShop(); log('Generated new shop stock'); };
 function buildShop(){ const empty=el('shop-empty'); const cont=el('shop-container'); const body=el('shop-body'); if(!currentShop||!currentShop.length){ empty.style.display=''; cont.style.display='none'; return;} empty.style.display='none'; cont.style.display=''; body.innerHTML=''; currentShop.forEach(it=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td><input type='checkbox' data-id='${it.id}'></td><td>${it.name}</td><td><span class='tag rar-${it.rarity}'>${it.rarity}</span></td><td>${it.price_cp}</td>`; body.appendChild(tr); }); }
