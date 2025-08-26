@@ -1,0 +1,16 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='640' height='360' viewBox='0 0 640 360'>
+<defs>
+<linearGradient id='g3' x1='0' y1='0' x2='0' y2='1'>
+<stop offset='0%' stop-color='#4a321c'/>
+<stop offset='100%' stop-color='#1d140d'/>
+</linearGradient>
+<pattern id='wood' patternUnits='userSpaceOnUse' width='40' height='40'>
+<rect width='40' height='40' fill='#2e2116'/>
+<path d='M0 10h40M0 30h40' stroke='#3c2c1d' stroke-width='2'/>
+<path d='M5 0v40M25 0v40' stroke='#44311f' stroke-width='3' stroke-opacity='.6'/>
+</pattern>
+</defs>
+<rect width='640' height='360' fill='url(#g3)'/>
+<rect x='40' y='70' width='560' height='220' fill='url(#wood)' stroke='#5d3f26' stroke-width='4' rx='12'/>
+<text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='#e8c38d' font-family='Cinzel, serif' font-size='32'>Tavern</text>
+</svg>

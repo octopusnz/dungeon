@@ -35,6 +35,7 @@ h1{font-family:'Cinzel Decorative',cursive;font-size:1.55rem;letter-spacing:.5px
 section.panel{background:linear-gradient(145deg,rgba(60,46,34,0.92),rgba(30,22,18,0.92));border:1px solid #3a2f24;border-radius:14px;box-shadow:0 4px 10px rgba(0,0,0,.45),inset 0 0 0 1px rgba(255,255,255,0.04);padding:.9rem 1.05rem}
 section.panel h2{font:600 .95rem 'Cinzel',serif;color:#caa75b}
 button{background:linear-gradient(145deg,#3f2e21,#2a2019);color:#f5e9d6;border:1px solid #4e3a2b;border-radius:8px;font:600 .78rem 'Cinzel',serif;letter-spacing:.5px;padding:.5rem .85rem}
+section.panel button{margin-top:.35rem}
 button:hover{background:linear-gradient(145deg,#57402d,#3a2b22)}
 button.danger{background:linear-gradient(145deg,#5e2323,#401515);border-color:#6d2c2c}
 button.danger:hover{background:linear-gradient(145deg,#7b2f2f,#512020)}
@@ -51,13 +52,14 @@ button.danger:hover{background:linear-gradient(145deg,#7b2f2f,#512020)}
 	<h1>Dungeon (Browser)</h1>
 	<div class="actions-grid">
 		<button id="act-pick">Pickpocket</button>
-		<button id="act-fight">Fight</button>
 		<button id="act-shop-gen">New Shop</button>
-		<button id="act-tavern">Tavern</button>
 		<button id="act-reset" class="danger">Reset</button>
 	</div>
 </header>
 <main>
+	<section class="panel" id="scene-panel" style="padding:.5rem 0 .2rem 0;display:flex;justify-content:center;align-items:center;min-height:200px;overflow:hidden">
+		<img id="scene-img" src="assets/scene_pickpocket.svg" alt="Scene" style="max-width:100%;height:auto;filter:drop-shadow(0 0 6px rgba(0,0,0,.6))"/>
+	</section>
 	<section class="panel" id="inv-panel">
 		<h2>Inventory <span id="inv-currency"></span></h2>
 		<div id="inventoryItems"></div>
@@ -70,17 +72,15 @@ button.danger:hover{background:linear-gradient(145deg,#7b2f2f,#512020)}
 				<div class="muted" id="pp-info">Random candidate loot is generated each attempt. Stored luck boosts chance of a special event.</div>
 				<button id="pp-run">Pickpocket</button>
 			</section>
-			<section class="panel">
-				<h2>Loot Input</h2>
-				<input id="loot-input" placeholder="e.g. 3 gp and a silver ring" />
-				<div class="actions-grid">
-					<button id="loot-add">Add Loot</button>
-					<button id="penalty-apply">Apply 7% Penalty</button>
-				</div>
+			<section class="panel" id="fight-panel">
+				<h2>Fight</h2>
+				<div class="muted">Engage a random foe. Victory grants gold; defeat may cost some.</div>
+				<button id="fight-run" style="margin-top:.5rem">Fight Monster</button>
 			</section>
-			<section class="panel" id="tavern-panel" style="display:none">
+			<section class="panel" id="tavern-panel">
 				<h2>Tavern</h2>
-				<div class="actions-grid">
+				<div class="muted">Spend coin for modest benefits; rare chances to gain stored luck.</div>
+				<div class="actions-grid" style="margin-top:.5rem">
 					<button data-tv="drink">Drink</button>
 					<button data-tv="food">Food</button>
 					<button data-tv="stay">Stay</button>
@@ -129,9 +129,20 @@ function unwrap(result){
 	if(result.state){
 		renderState(result.state);
 		if(result.message) log(result.message);
+		updateSceneFromMessage(result.message || '');
 	} else {
 		renderState(result);
 	}
+}
+const scene = el('scene-img');
+function setScene(name){
+	scene.src = `assets/scene_${name}.svg`;
+}
+function updateSceneFromMessage(msg){
+	const m = msg.toLowerCase();
+	if(m.includes('victory') || m.includes('defeated') || m.includes('battle') || m.includes('fight')) setScene('fight');
+	else if(m.includes('tavern') || m.includes('drink') || m.includes('meal') || m.includes('tip') || m.includes('kiss')) setScene('tavern');
+	else if(m.includes('pickpocket') || m.includes('mysterious')) setScene('pickpocket');
 }
 async function start(){
 	await init();
@@ -142,17 +153,15 @@ async function start(){
 start();
 // Core actions
 el('act-reset').onclick=()=>unwrap(game.reset());
-el('loot-add').onclick=()=>{ const v=el('loot-input').value.trim(); if(!v) return; unwrap(game.add_loot(v)); el('loot-input').value=''; };
-el('penalty-apply').onclick=()=>unwrap(game.apply_penalty(7));
 el('pp-run').onclick=()=>{ unwrap(game.pickpocket("")); };
 el('act-pick').onclick=()=>{ unwrap(game.pickpocket("")); };
-el('act-fight').onclick=()=>unwrap(game.fight());
+// Fight panel
+el('fight-run').onclick=()=>{ unwrap(game.fight()); setScene('fight'); };
 // Shop
 el('act-shop-gen').onclick=()=>{ const res=game.generate_shop(); currentShop = res.items; buildShop(); log('Generated new shop stock'); };
 function buildShop(){ const empty=el('shop-empty'); const cont=el('shop-container'); const body=el('shop-body'); if(!currentShop||!currentShop.length){ empty.style.display=''; cont.style.display='none'; return;} empty.style.display='none'; cont.style.display=''; body.innerHTML=''; currentShop.forEach(it=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td><input type='checkbox' data-id='${it.id}'></td><td>${it.name}</td><td><span class='tag rar-${it.rarity}'>${it.rarity}</span></td><td>${it.price_cp}</td>`; body.appendChild(tr); }); }
 el('shop-buy').onclick=()=>{ const checks=[...document.querySelectorAll('#shop-body input[type=checkbox]:checked')]; if(!checks.length){ log('No items selected'); return; } const ids=checks.map(c=>Number(c.getAttribute('data-id'))); const haggle=el('shop-haggle').checked; const spend=el('shop-use-luck').checked; unwrap(game.shop_purchase(ids, haggle, spend)); };
-// Tavern
-el('act-tavern').onclick=()=>{ const p=el('tavern-panel'); p.style.display = p.style.display==='none' ? '' : 'none'; };
-document.querySelectorAll('#tavern-panel button[data-tv]').forEach(b=>{ b.onclick=()=>{ const act=b.getAttribute('data-tv'); unwrap(game.tavern(act)); }; });
+// Tavern buttons
+document.querySelectorAll('#tavern-panel button[data-tv]').forEach(b=>{ b.onclick=()=>{ const act=b.getAttribute('data-tv'); unwrap(game.tavern(act)); setScene('tavern'); }; });
 </script>
 </body></html>

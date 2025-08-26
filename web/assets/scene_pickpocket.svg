@@ -1,0 +1,16 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='640' height='360' viewBox='0 0 640 360'>
+<defs>
+<linearGradient id='g1' x1='0' y1='0' x2='0' y2='1'>
+<stop offset='0%' stop-color='#1d2731'/>
+<stop offset='100%' stop-color='#0c1115'/>
+</linearGradient>
+</defs>
+<rect width='640' height='360' fill='url(#g1)'/>
+<g fill='none' stroke='#374a56' stroke-width='2'>
+<path d='M40 300l80-160 80 160'/>
+<path d='M240 300l60-120 60 120'/>
+<path d='M380 300l40-80 40 80'/>
+</g>
+<circle cx='540' cy='90' r='60' fill='#f5d07a' fill-opacity='.15' stroke='#c4aa68'/>
+<text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='#caa75b' font-family='Cinzel, serif' font-size='28'>Pickpocket</text>
+</svg>
