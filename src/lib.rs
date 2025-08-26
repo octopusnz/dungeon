@@ -6,11 +6,6 @@ pub mod ui;
 #[cfg(feature = "wasm")]
 pub mod wasm_api;
 
-// Use a smaller allocator for wasm builds to reduce code size
-#[cfg(all(feature = "wasm", target_arch = "wasm32"))]
-#[global_allocator]
-static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
-
 pub use ui::{print_event_summary, print_simple_header};
 
 // Shared helper
