@@ -1,7 +1,11 @@
 // Clean minimal entrypoint (legacy code moved into library modules)
-use dungeon_core::{inventory::{Inventory, SAVE_FILE}, ui::{prompt_main_action, MainAction}, actions::{pick_pocket, visit_shop, fight_monster, visit_tavern}};
-use std::fs;
+use dungeon_core::{
+    actions::{fight_monster, pick_pocket, visit_shop, visit_tavern},
+    inventory::{Inventory, SAVE_FILE},
+    ui::{MainAction, prompt_main_action},
+};
 use std::env;
+use std::fs;
 
 const LOOT_FILE: &str = "loot.json";
 
@@ -11,7 +15,12 @@ fn load_loot_items() -> Vec<String> {
         .and_then(|d| serde_json::from_str(&d).ok())
         .unwrap_or_else(|| {
             println!("⚠️  Failed to load loot.json. Using default items.");
-            vec!["Gold Coin".into(), "Silver Ring".into(), "Rusty Dagger".into(), "Health Potion".into()]
+            vec![
+                "Gold Coin".into(),
+                "Silver Ring".into(),
+                "Rusty Dagger".into(),
+                "Health Potion".into(),
+            ]
         })
 }
 
@@ -29,7 +38,10 @@ fn handle_reset_flag() {
 }
 
 fn print_help_and_exit() {
-    println!("Usage: dungeon [OPTIONS]\n\nOptions:\n  -v, --version    Show version and exit\n  -r, --reset      Reset inventory (delete {save})\n  -h, --help       Show this help and exit\n\nShort flags can be clustered, e.g. -rv.", save = SAVE_FILE);
+    println!(
+        "Usage: dungeon [OPTIONS]\n\nOptions:\n  -v, --version    Show version and exit\n  -r, --reset      Reset inventory (delete {save})\n  -h, --help       Show this help and exit\n\nShort flags can be clustered, e.g. -rv.",
+        save = SAVE_FILE
+    );
 }
 
 fn main() {
@@ -37,32 +49,59 @@ fn main() {
     let mut args: Vec<String> = env::args().skip(1).collect();
     if !args.is_empty() {
         // Support combined short flags like -vr (order independent)
-    let mut did_action = false;
+        let mut did_action = false;
         let mut remaining: Vec<String> = Vec::new();
         for a in args.drain(..) {
             match a.as_str() {
-        "-v" | "--version" => { print_version_and_exit(); return; }
-        "-r" | "--reset" => { handle_reset_flag(); did_action = true; }
-        "-h" | "--help" => { print_help_and_exit(); return; }
+                "-v" | "--version" => {
+                    print_version_and_exit();
+                    return;
+                }
+                "-r" | "--reset" => {
+                    handle_reset_flag();
+                    did_action = true;
+                }
+                "-h" | "--help" => {
+                    print_help_and_exit();
+                    return;
+                }
                 _ if a.starts_with('-') && !a.starts_with("--") && a.len() > 2 => {
                     // Split clustered short flags like -vr
-                    for ch in a.chars().skip(1) { match ch {
-                        'v' => { print_version_and_exit(); return; }
-                        'r' => { handle_reset_flag(); did_action = true; }
-            'h' => { print_help_and_exit(); return; }
-                        other => { println!("Ignoring unknown short flag -{}", other); }
-                    }}
+                    for ch in a.chars().skip(1) {
+                        match ch {
+                            'v' => {
+                                print_version_and_exit();
+                                return;
+                            }
+                            'r' => {
+                                handle_reset_flag();
+                                did_action = true;
+                            }
+                            'h' => {
+                                print_help_and_exit();
+                                return;
+                            }
+                            other => {
+                                println!("Ignoring unknown short flag -{}", other);
+                            }
+                        }
+                    }
                 }
-                _ => remaining.push(a)
+                _ => remaining.push(a),
             }
         }
         args = remaining;
         // If we only performed a reset action and nothing else, exit early
-        if did_action && args.is_empty() { return; }
+        if did_action && args.is_empty() {
+            return;
+        }
     }
     let loot_items = load_loot_items();
     println!("Loaded {} loot items from {}", loot_items.len(), LOOT_FILE);
-    let mut inventory = Inventory::load().unwrap_or_else(|_| { println!("No existing inventory found, starting fresh!"); Inventory::new() });
+    let mut inventory = Inventory::load().unwrap_or_else(|_| {
+        println!("No existing inventory found, starting fresh!");
+        Inventory::new()
+    });
     loop {
         match prompt_main_action() {
             MainAction::PickPocket => pick_pocket(&mut inventory, &loot_items),
@@ -71,12 +110,14 @@ fn main() {
             MainAction::Fight => fight_monster(&mut inventory),
             MainAction::Tavern => visit_tavern(&mut inventory),
             MainAction::Exit => {
-                if let Err(e) = inventory.save() { println!("Failed to save inventory: {}", e); } else { println!("Inventory saved!"); }
+                if let Err(e) = inventory.save() {
+                    println!("Failed to save inventory: {}", e);
+                } else {
+                    println!("Inventory saved!");
+                }
                 println!("Exiting");
                 break;
             }
         }
     }
 }
-
-

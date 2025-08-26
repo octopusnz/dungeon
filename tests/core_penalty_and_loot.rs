@@ -1,23 +1,35 @@
-use dungeon_core::{loot::parse_and_format_loot_cached, apply_pickpocket_penalty};
+use dungeon_core::{apply_pickpocket_penalty, loot::parse_and_format_loot_cached};
 
 #[test]
 fn penalty_zero_gold() {
-    let mut g = 0; let lost = apply_pickpocket_penalty(&mut g, 7); assert_eq!(lost, 0); assert_eq!(g, 0);
+    let mut g = 0;
+    let lost = apply_pickpocket_penalty(&mut g, 7);
+    assert_eq!(lost, 0);
+    assert_eq!(g, 0);
 }
 
 #[test]
 fn penalty_minimum_one() {
-    let mut g = 5; let lost = apply_pickpocket_penalty(&mut g, 1); assert_eq!(lost, 1); assert_eq!(g, 4);
+    let mut g = 5;
+    let lost = apply_pickpocket_penalty(&mut g, 1);
+    assert_eq!(lost, 1);
+    assert_eq!(g, 4);
 }
 
 #[test]
 fn penalty_percentage_rounding() {
-    let mut g = 137; let lost = apply_pickpocket_penalty(&mut g, 7); assert_eq!(lost, 10); assert_eq!(g, 127);
+    let mut g = 137;
+    let lost = apply_pickpocket_penalty(&mut g, 7);
+    assert_eq!(lost, 10);
+    assert_eq!(g, 127);
 }
 
 #[test]
 fn penalty_full_edge() {
-    let mut g = 1; let lost = apply_pickpocket_penalty(&mut g, 50); assert_eq!(lost, 1); assert_eq!(g, 0);
+    let mut g = 1;
+    let lost = apply_pickpocket_penalty(&mut g, 50);
+    assert_eq!(lost, 1);
+    assert_eq!(g, 0);
 }
 
 #[test]

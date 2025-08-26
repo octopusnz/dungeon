@@ -1,12 +1,23 @@
-use dungeon_core::{inventory::{Inventory, format_cp}, loot::parse_loot_into_items, apply_pickpocket_penalty, actions::{TAVERN_TIP_COST_GP}};
+use dungeon_core::{
+    actions::TAVERN_TIP_COST_GP,
+    apply_pickpocket_penalty,
+    inventory::{Inventory, format_cp},
+    loot::parse_loot_into_items,
+};
 
 // Helper harness snippet for tavern tip logic (non-interactive)
 fn simulate_tip(inventory: &mut Inventory, luck_roll_success: bool) -> bool {
     // Emulate internal tavern logic cost & luck
-    if inventory.luck_boost { return false; }
+    if inventory.luck_boost {
+        return false;
+    }
     let cost_cp = TAVERN_TIP_COST_GP * 100;
-    if !inventory.try_spend_cp(cost_cp) { return false; }
-    if luck_roll_success { inventory.luck_boost = true; }
+    if !inventory.try_spend_cp(cost_cp) {
+        return false;
+    }
+    if luck_roll_success {
+        inventory.luck_boost = true;
+    }
     true
 }
 
@@ -14,7 +25,10 @@ fn simulate_tip(inventory: &mut Inventory, luck_roll_success: bool) -> bool {
 fn add_copper_converts_to_higher_denominations() {
     let mut inv = Inventory::new();
     inv.add_copper(275); // 2 gp (200), 7 sp (70), 5 cp
-    assert_eq!((inv.gold_pieces, inv.silver_pieces, inv.copper_pieces), (2,7,5));
+    assert_eq!(
+        (inv.gold_pieces, inv.silver_pieces, inv.copper_pieces),
+        (2, 7, 5)
+    );
 }
 
 #[test]
@@ -46,7 +60,10 @@ fn format_cp_various_cases() {
 
 #[test]
 fn penalty_zero_percent_no_change() {
-    let mut g = 50; let lost = apply_pickpocket_penalty(&mut g, 0); assert_eq!(lost, 0); assert_eq!(g, 50);
+    let mut g = 50;
+    let lost = apply_pickpocket_penalty(&mut g, 0);
+    assert_eq!(lost, 0);
+    assert_eq!(g, 50);
 }
 
 #[test]
@@ -66,6 +83,12 @@ fn tavern_tip_second_attempt_blocked() {
     assert!(first && inv.luck_boost);
     let gold_after_first = inv.gold_pieces;
     let second = simulate_tip(&mut inv, true);
-    assert!(!second, "Second tip should be blocked when luck already stored");
-    assert_eq!(inv.gold_pieces, gold_after_first, "Gold should not change on blocked second tip");
+    assert!(
+        !second,
+        "Second tip should be blocked when luck already stored"
+    );
+    assert_eq!(
+        inv.gold_pieces, gold_after_first,
+        "Gold should not change on blocked second tip"
+    );
 }

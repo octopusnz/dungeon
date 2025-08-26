@@ -1,5 +1,5 @@
-use rand::rngs::SmallRng;
 use rand::SeedableRng; // for from_entropy
+use rand::rngs::SmallRng;
 use std::cell::RefCell;
 
 thread_local! {
