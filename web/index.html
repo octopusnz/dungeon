@@ -148,8 +148,15 @@ body.theme-fantasy .blink{display:none}
 	</div>
 </main>
 <script type="module">
-import init, { Game } from './pkg/dungeon_core.js';
+// Dynamic import with a cache-busting query (version.txt if present)
+async function loadWasmModule(){
+	let ver = '';
+	try { const r = await fetch('./pkg/version.txt',{cache:'no-store'}); if(r.ok){ ver = (await r.text()).trim().split('=')[1] || ''; } } catch(_){ }
+	const mod = await import(`./pkg/dungeon_core.js?ver=${ver||Date.now()}`);
+	return mod;
+}
 const el = id=>document.getElementById(id);
+let Game, init;
 const logEl = el('log');
 let game; let currentShop = [];
 function log(msg){ const ts=new Date().toLocaleTimeString(); logEl.textContent += `[${ts}] ${msg}\n`; logEl.scrollTop = logEl.scrollHeight; }
@@ -206,12 +213,15 @@ function applyTheme(t){
 }
 function toggleTheme(){ applyTheme(activeTheme()==='fantasy'?'bbs':'fantasy'); }
 async function start(){
+	const mod = await loadWasmModule();
+	init = mod.default; Game = mod.Game;
 	await init();
 	game = new Game();
 	unwrap(game.get_state());
 	log('Game started');
 	const saved = localStorage.getItem('dungeon_theme');
 	applyTheme(saved==='fantasy'?'fantasy':'bbs');
+	setupFightBindings();
 }
 start();
 // Core actions
@@ -244,10 +254,27 @@ function renderFight(fs){
 function unwrapFight(res){
 	if(!res) return; renderFight(res); renderState(res.inventory); if(res.message) { log(res.message); updateSceneFromMessage(res.message); }
 }
-el('fight-start').onclick=()=>{ unwrapFight(game.fight_start()); };
-el('fight-attack').onclick=()=>{ unwrapFight(game.fight_attack()); };
-el('fight-flee').onclick=()=>{ unwrapFight(game.fight_flee()); };
-el('fight-quit').onclick=()=>{ unwrapFight(game.fight_quit()); };
+function setupFightBindings(){
+	const hasInteractive = game && typeof game.fight_start === 'function';
+	if(!hasInteractive){
+		// Fallback: create a single-action fight button if new API missing (stale wasm)
+		let fallback = document.getElementById('fight-fallback');
+		if(!fallback){
+			fallback = document.createElement('button');
+			fallback.id='fight-fallback';
+			fallback.textContent='LEGACY FIGHT';
+			fallback.style.marginTop='6px';
+			el('fight-panel').querySelector('.actions-grid').prepend(fallback);
+			const desc = el('fight-desc'); if(desc){ desc.textContent = 'Legacy fight mode active (update deployment for interactive combat).'; }
+		}
+		fallback.onclick=()=>{ try { unwrap(game.fight()); } catch(e){ log('Fight unavailable: '+e); } };
+		return;
+	}
+	el('fight-start').onclick=()=>{ unwrapFight(game.fight_start()); };
+	el('fight-attack').onclick=()=>{ unwrapFight(game.fight_attack()); };
+	el('fight-flee').onclick=()=>{ unwrapFight(game.fight_flee()); };
+	el('fight-quit').onclick=()=>{ unwrapFight(game.fight_quit()); };
+}
 // Shop
 el('act-shop-gen').onclick=()=>{ const res=game.generate_shop(); currentShop = res.items; buildShop(); log('Generated new shop stock'); };
 function buildShop(){ const empty=el('shop-empty'); const cont=el('shop-container'); const body=el('shop-body'); if(!currentShop||!currentShop.length){ empty.style.display=''; cont.style.display='none'; return;} empty.style.display='none'; cont.style.display=''; body.innerHTML=''; currentShop.forEach(it=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td><input type='checkbox' data-id='${it.id}'></td><td>${it.name}</td><td><span class='tag rar-${it.rarity}'>${it.rarity}</span></td><td>${it.price_cp}</td>`; body.appendChild(tr); }); }
