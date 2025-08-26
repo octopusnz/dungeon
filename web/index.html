@@ -48,8 +48,8 @@ table.shop tbody tr:hover{background:#1f2831}
 		<div class="col">
 			<section class="panel">
 				<h2>Pickpocket</h2>
-				<textarea id="pp-candidates" placeholder="Pipe separated loot options e.g. 5 gp and a ruby|2 sp and a torch"></textarea>
-				<button id="pp-run">Attempt Pickpocket</button>
+				<div class="muted" id="pp-info">Random candidate loot is generated each attempt. Stored luck boosts chance of a special event.</div>
+				<button id="pp-run">Pickpocket</button>
 			</section>
 			<section class="panel">
 				<h2>Loot Input</h2>
@@ -125,8 +125,8 @@ start();
 el('act-reset').onclick=()=>unwrap(game.reset());
 el('loot-add').onclick=()=>{ const v=el('loot-input').value.trim(); if(!v) return; unwrap(game.add_loot(v)); el('loot-input').value=''; };
 el('penalty-apply').onclick=()=>unwrap(game.apply_penalty(7));
-el('pp-run').onclick=()=>{ const c=el('pp-candidates').value.trim(); if(!c) return; unwrap(game.pickpocket(c)); };
-el('act-pick').onclick=()=>{ el('pp-candidates').focus(); };
+el('pp-run').onclick=()=>{ unwrap(game.pickpocket("")); };
+el('act-pick').onclick=()=>{ unwrap(game.pickpocket("")); };
 el('act-fight').onclick=()=>unwrap(game.fight());
 // Shop
 el('act-shop-gen').onclick=()=>{ const res=game.generate_shop(); currentShop = res.items; buildShop(); log('Generated new shop stock'); };

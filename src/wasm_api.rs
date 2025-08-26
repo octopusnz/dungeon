@@ -59,9 +59,45 @@ impl Game {
     /// Perform a pickpocket attempt using provided loot candidate descriptions (comma separated list)
     #[wasm_bindgen]
     pub fn pickpocket(&mut self, loot_candidates: &str) -> JsValue {
-        let items: Vec<String> = loot_candidates.split('|').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
-        if items.is_empty() { return self.wrap("No loot candidates provided"); }
-        pick_pocket(&mut self.inv, &items); self.wrap("Performed pickpocket attempt")
+        // If caller supplies candidates, use them; otherwise generate a random candidate set.
+        let mut items: Vec<String> = loot_candidates
+            .split('|')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        if items.is_empty() {
+            // Auto-generate 5 random candidate loot descriptions (currency + trinket)
+            const TRINKETS: &[&str] = &[
+                "silver ring","brass key","tiny idol","opal shard","bloodstone","engraved locket",
+                "vellum scroll","jeweled clasp","carved bone die","amber bead","ancient coin","silk ribbon"
+            ];
+            let mut rng = rand::rngs::SmallRng::from_entropy();
+            let count = 5;
+            for _ in 0..count { 
+                let gp = rng.gen_range(1..=25); // modest gold range
+                let trinket = TRINKETS[rng.gen_range(0..TRINKETS.len())];
+                // 50% chance to mix silver instead of gp for variety
+                let desc = if rng.gen_bool(0.5) {
+                    let sp = rng.gen_range(2..=40);
+                    format!("{} gp and {} sp and a {}", gp, sp, trinket)
+                } else {
+                    format!("{} gp and a {}", gp, trinket)
+                };
+                items.push(desc);
+            }
+        }
+        let before_gp = self.inv.gold_pieces;
+        let before_items = self.inv.items.len();
+        let had_luck = self.inv.luck_boost;
+        pick_pocket(&mut self.inv, &items);
+        let gained_gp = self.inv.gold_pieces.saturating_sub(before_gp);
+        let added_items = self.inv.items.len().saturating_sub(before_items);
+        let mut parts = Vec::new();
+        if gained_gp>0 { parts.push(format!("+{} gp", gained_gp)); }
+        if added_items>0 { parts.push(format!("{} item(s) added", added_items)); }
+        if had_luck && !self.inv.luck_boost { parts.push("luck spent".into()); }
+        if parts.is_empty() { parts.push("no gain".into()); }
+        self.wrap(format!("Pickpocket: {}", parts.join(", ")))
     }
 
     /// Simulate a monster fight (random outcome & reward internally)
