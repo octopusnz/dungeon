@@ -20,16 +20,41 @@ jobs:
     env:
       RUSTFLAGS: -Dwarnings
       SCCACHE_GHA_ENABLED: "true"
+    outputs:
+      build_wasm: ${{ steps.detect_changes.outputs.build }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
+      - name: Detect relevant changes (Rust only: src/, Cargo.toml/lock)
+        id: detect_changes
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+          else
+            base=$(git rev-parse HEAD^ || echo '')
+          fi
+          if [ -z "$base" ]; then
+            echo "No base commit (initial or force push); forcing build"; echo "build=1" >> "$GITHUB_OUTPUT"; exit 0; fi
+          echo "Diff base: $base -> HEAD";
+          changed=$(git diff --name-only "$base" HEAD)
+          printf '%s\n' "$changed" | sed 's/^/CHANGED: /'
+          if printf '%s\n' "$changed" | grep -E '^(src/|Cargo.toml|Cargo.lock)' >/dev/null; then
+            echo "Relevant Rust changes detected -> build wasm"; echo "build=1" >> "$GITHUB_OUTPUT";
+          else
+            echo "No relevant Rust changes -> skip wasm build"; echo "build=0" >> "$GITHUB_OUTPUT";
+          fi
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
-      - name: Install sccache
-        uses: mozilla-actions/sccache-action@v0.0.4
+      - name: Install sccache (manual)
+        run: |
+          set -euo pipefail
+          if ! command -v sccache >/dev/null; then
+            cargo install sccache --locked --version 0.7.4 || cargo install sccache --locked || true
+          fi
       - name: Cache cargo
         uses: actions/cache@v4
         with:
@@ -43,8 +68,20 @@ jobs:
             cache-${{ runner.os }}-
       - name: Export sccache env
         run: |
-          echo "RUSTC_WRAPPER=$(which sccache)" >> $GITHUB_ENV
+          echo "RUSTC_WRAPPER=$(which sccache || echo '')" >> $GITHUB_ENV
           echo "SCCACHE_CACHE_SIZE=2G" >> $GITHUB_ENV
+      - name: Start sccache (retry + fallback)
+        run: |
+          if [ -z "${RUSTC_WRAPPER}" ]; then
+            echo "sccache not installed; skipping."; exit 0; fi
+          attempt=0
+          until sccache --start-server 2>/tmp/sccache_start.log || [ $attempt -ge 2 ]; do
+            echo "sccache start failed (attempt $attempt); retrying in 5s"; cat /tmp/sccache_start.log || true; sleep 5; attempt=$((attempt+1));
+          done
+            if ! sccache --show-stats >/dev/null 2>&1; then
+              echo "Disabling sccache due to startup failure"; echo "RUSTC_WRAPPER=" >> $GITHUB_ENV; fi
+      - name: Show sccache stats (pre-build)
+        run: sccache --show-stats || echo "sccache inactive"
       - name: Install wasm-bindgen-cli (match lockfile)
         run: |
           set -euo pipefail
@@ -66,8 +103,11 @@ jobs:
 
   wasm_build:
     needs: lint_test
+    if: ${{ github.ref == 'refs/heads/master' && needs.lint_test.outputs.build_wasm == '1' }}
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/master'
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTFLAGS: -C debuginfo=0
     steps:
       - uses: actions/checkout@v4
         with:
@@ -76,16 +116,28 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
-      - name: Restore cargo cache
+      - name: Restore cargo & sccache cache
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
+            ~/.cache/sccache
             target
           key: cache-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             cache-${{ runner.os }}-
+      - name: Install sccache (manual)
+        run: |
+          set -euo pipefail
+          if ! command -v sccache >/dev/null; then
+            cargo install sccache --locked --version 0.7.4 || cargo install sccache --locked || true
+          fi
+          echo "RUSTC_WRAPPER=$(which sccache || echo '')" >> $GITHUB_ENV
+          echo "SCCACHE_CACHE_SIZE=2G" >> $GITHUB_ENV
+          if [ -n "$(which sccache || true)" ]; then sccache --start-server || true; fi
+      - name: Show sccache stats (pre-build)
+        run: sccache --show-stats || echo "sccache inactive"
       - name: Install wasm-bindgen-cli (match lockfile)
         run: |
           set -euo pipefail
@@ -107,6 +159,7 @@ jobs:
           touch web/.nojekyll
           test -f web/index.html || { echo 'index.html missing in web/'; exit 1; }
           test -f web/pkg/dungeon_core_bg.wasm || { echo 'wasm-bindgen output missing'; ls -R web/pkg; exit 1; }
+          if command -v sccache >/dev/null; then sccache --show-stats || true; fi
       - name: Cache Binaryen
         id: cache-binaryen
         uses: actions/cache@v4
@@ -140,8 +193,28 @@ jobs:
         with:
           path: web
 
+  upload_static:
+    needs: lint_test
+    if: ${{ github.ref == 'refs/heads/master' && needs.lint_test.outputs.build_wasm != '1' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Verify static web assets
+        run: |
+          test -f web/index.html || { echo 'index.html missing'; exit 1; }
+          echo "Skipping wasm build; deploying static assets only." | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+      - name: Upload artifact (static only)
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+
   deploy:
-    needs: wasm_build
+    needs: [lint_test, wasm_build, upload_static]
+    if: ${{ github.ref == 'refs/heads/master' && (needs.wasm_build.result == 'success' || needs.upload_static.result == 'success') }}
     runs-on: ubuntu-latest
     environment:
       name: github-pages
