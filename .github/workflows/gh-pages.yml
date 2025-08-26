@@ -24,7 +24,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 2
-      - name: Detect relevant Rust changes (src/ or Cargo manifest modified)
+      - name: Detect relevant changes (Rust or web assets)
         id: detect_changes
         run: |
           set -euo pipefail
@@ -38,8 +38,8 @@ jobs:
           echo "Diff base: $base -> HEAD"
           git diff --name-only "$base" HEAD > changed_files.txt
           sed 's/^/CHANGED: /' changed_files.txt || true
-          if grep -E '^(src/|Cargo.toml|Cargo.lock)' changed_files.txt >/dev/null; then
-            echo "Relevant Rust changes detected -> build wasm"; echo "build=1" >> "$GITHUB_OUTPUT"
+          if grep -E '^(src/|Cargo.toml|Cargo.lock|web/)' changed_files.txt >/dev/null; then
+            echo "Relevant source/web changes detected -> build wasm"; echo "build=1" >> "$GITHUB_OUTPUT"
           else
             echo "No relevant Rust changes -> skip wasm build"; echo "build=0" >> "$GITHUB_OUTPUT"
           fi
