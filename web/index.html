@@ -104,22 +104,36 @@ function renderState(state){
 	el('inv-currency').textContent = `GP ${state.gp} | SP ${state.sp} | CP ${state.cp}`;
 	el('luck-ind').textContent = state.luck ? 'Luck stored for next relevant action.' : '';
 }
-function unwrap(result){ if(result.state){ renderState(result.state); if(result.message) log(result.message);} else { renderState(result); } }
-async function start(){ await init(); game = new Game(); unwrap(JSON.parse(game.get_state())); log('Game started'); }
+function unwrap(result){
+	// Result may be either a WasmResult { state, message } or a raw WasmInventory
+	if(!result) return;
+	if(result.state){
+		renderState(result.state);
+		if(result.message) log(result.message);
+	} else {
+		renderState(result);
+	}
+}
+async function start(){
+	await init();
+	game = new Game();
+	unwrap(game.get_state());
+	log('Game started');
+}
 start();
 // Core actions
-el('act-reset').onclick=()=>unwrap(JSON.parse(game.reset()));
-el('loot-add').onclick=()=>{ const v=el('loot-input').value.trim(); if(!v) return; unwrap(JSON.parse(game.add_loot(v))); el('loot-input').value=''; };
-el('penalty-apply').onclick=()=>unwrap(JSON.parse(game.apply_penalty(7)));
-el('pp-run').onclick=()=>{ const c=el('pp-candidates').value.trim(); if(!c) return; unwrap(JSON.parse(game.pickpocket(c))); };
+el('act-reset').onclick=()=>unwrap(game.reset());
+el('loot-add').onclick=()=>{ const v=el('loot-input').value.trim(); if(!v) return; unwrap(game.add_loot(v)); el('loot-input').value=''; };
+el('penalty-apply').onclick=()=>unwrap(game.apply_penalty(7));
+el('pp-run').onclick=()=>{ const c=el('pp-candidates').value.trim(); if(!c) return; unwrap(game.pickpocket(c)); };
 el('act-pick').onclick=()=>{ el('pp-candidates').focus(); };
-el('act-fight').onclick=()=>unwrap(JSON.parse(game.fight()));
+el('act-fight').onclick=()=>unwrap(game.fight());
 // Shop
-el('act-shop-gen').onclick=()=>{ const res=JSON.parse(game.generate_shop()); currentShop = res.items; buildShop(); log('Generated new shop stock'); };
+el('act-shop-gen').onclick=()=>{ const res=game.generate_shop(); currentShop = res.items; buildShop(); log('Generated new shop stock'); };
 function buildShop(){ const empty=el('shop-empty'); const cont=el('shop-container'); const body=el('shop-body'); if(!currentShop||!currentShop.length){ empty.style.display=''; cont.style.display='none'; return;} empty.style.display='none'; cont.style.display=''; body.innerHTML=''; currentShop.forEach(it=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td><input type='checkbox' data-id='${it.id}'></td><td>${it.name}</td><td><span class='tag rar-${it.rarity}'>${it.rarity}</span></td><td>${it.price_cp}</td>`; body.appendChild(tr); }); }
-el('shop-buy').onclick=()=>{ const checks=[...document.querySelectorAll('#shop-body input[type=checkbox]:checked')]; if(!checks.length){ log('No items selected'); return; } const ids=checks.map(c=>Number(c.getAttribute('data-id'))); const haggle=el('shop-haggle').checked; const spend=el('shop-use-luck').checked; unwrap(JSON.parse(game.shop_purchase(ids, haggle, spend))); };
+el('shop-buy').onclick=()=>{ const checks=[...document.querySelectorAll('#shop-body input[type=checkbox]:checked')]; if(!checks.length){ log('No items selected'); return; } const ids=checks.map(c=>Number(c.getAttribute('data-id'))); const haggle=el('shop-haggle').checked; const spend=el('shop-use-luck').checked; unwrap(game.shop_purchase(ids, haggle, spend)); };
 // Tavern
 el('act-tavern').onclick=()=>{ const p=el('tavern-panel'); p.style.display = p.style.display==='none' ? '' : 'none'; };
-document.querySelectorAll('#tavern-panel button[data-tv]').forEach(b=>{ b.onclick=()=>{ const act=b.getAttribute('data-tv'); unwrap(JSON.parse(game.tavern(act))); }; });
+document.querySelectorAll('#tavern-panel button[data-tv]').forEach(b=>{ b.onclick=()=>{ const act=b.getAttribute('data-tv'); unwrap(game.tavern(act)); }; });
 </script>
 </body></html>
