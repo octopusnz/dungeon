@@ -124,9 +124,13 @@ impl Inventory {
         Ok(serde_json::from_str(&std::fs::read_to_string(SAVE_FILE)?)?)
     }
     #[cfg(all(feature = "wasm", not(feature = "cli"), not(test)))]
-    pub fn save(&self) -> Result<(), Box<dyn std::error::Error>> { Ok(()) }
+    pub fn save(&self) -> Result<(), Box<dyn std::error::Error>> {
+        Ok(())
+    }
     #[cfg(all(feature = "wasm", not(feature = "cli"), not(test)))]
-    pub fn load() -> Result<Self, Box<dyn std::error::Error>> { Ok(Self::new()) }
+    pub fn load() -> Result<Self, Box<dyn std::error::Error>> {
+        Ok(Self::new())
+    }
 }
 
 impl Default for Inventory {
