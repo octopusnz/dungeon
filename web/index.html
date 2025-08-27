@@ -79,6 +79,7 @@ body.theme-fantasy .blink{display:none}
 		<button id="act-shop-gen">NEW SHOP</button>
 		<button id="act-reset" class="danger">RESET</button>
 		<button id="theme-toggle" title="Toggle Theme">THEME</button>
+		<span id="build-ver" style="font-size:11px;opacity:.65"></span>
 	</div>
 </header>
 <main>
@@ -222,6 +223,8 @@ async function start(){
 	const saved = localStorage.getItem('dungeon_theme');
 	applyTheme(saved==='fantasy'?'fantasy':'bbs');
 	setupFightBindings();
+	// Display build/version hash if available
+	try { const vEl=el('build-ver'); const r=await fetch('./pkg/version.txt',{cache:'no-store'}); if(r.ok){ const txt=await r.text(); const short=txt.split('=')[1]||''; if(vEl) vEl.textContent = `build ${short}`; } } catch(_){ }
 }
 start();
 // Core actions
