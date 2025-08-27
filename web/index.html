@@ -19,6 +19,7 @@ body.theme-bbs button.danger{border-color:#5d1f1f;color:#ff8d8d}
 body.theme-bbs button.danger:hover{background:#2d0202}
 body.theme-bbs input[type=checkbox]{accent-color:#c73535}
 body.theme-bbs #inventoryItems span{display:inline-block;border:1px solid #5d1f1f;padding:1px 4px;margin:2px 3px;font-size:11px;background:#110000;color:#ff9d9d}
+body.theme-bbs .hp-line{font-size:12px;margin-top:4px;color:#ff6b6b;font-weight:600}
 body.theme-bbs .luck-flag{margin-top:6px;font-size:12px;font-weight:600;letter-spacing:.5px}
 body.theme-bbs .luck-ready{color:#ff6b6b}
 body.theme-bbs .luck-empty{color:#444}
@@ -55,6 +56,7 @@ body.theme-fantasy .luck-empty{color:#6d6257;opacity:.65}
 body.theme-fantasy #log{background:#121517;border:1px solid #313a42;border-radius:10px;padding:.7rem .75rem;font-size:.72rem;max-height:320px;line-height:1.35;white-space:pre-wrap;overflow:auto}
 body.theme-fantasy .muted{color:#b7c3cf;font-size:.75rem;margin:.3rem 0}
 body.theme-fantasy .currency{font:600 .8rem 'Cinzel',serif;color:#d3b375;margin-top:.45rem}
+body.theme-fantasy .hp-line{font:600 .8rem 'Cinzel',serif;color:#e58579;margin-top:.35rem}
 body.theme-fantasy table.shop{width:100%;border-collapse:collapse;font-size:.7rem}
 body.theme-fantasy table.shop th,body.theme-fantasy table.shop td{padding:4px 6px;border-bottom:1px solid #26303a;text-align:left}
 body.theme-fantasy table.shop tbody tr:hover{background:#1f2831}
@@ -91,6 +93,7 @@ body.theme-fantasy .blink{display:none}
 			<h2>Inventory</h2>
 			<div id="inventoryItems"></div>
 			<div class="currency" id="inv-currency"></div>
+			<div class="hp-line" id="inv-hp"></div>
 			<div id="luck-status" class="luck-flag luck-empty">Luck: NONE</div>
 			<div class="muted" id="luck-ind"></div>
 		</section>
@@ -165,6 +168,8 @@ function renderState(state){
 	const invSpan = el('inventoryItems'); invSpan.innerHTML='';
 	state.items.forEach(i=>{ const s=document.createElement('span'); s.textContent=i; invSpan.appendChild(s); });
 	el('inv-currency').textContent = `GP ${state.gp} | SP ${state.sp} | CP ${state.cp}`;
+	// HP display (fallback to 20 if missing)
+	const hpLine = el('inv-hp'); if(hpLine){ const max = state.max_hp || 20; const cur = Math.min(state.current_hp||max, max); hpLine.textContent = `HP ${cur}/${max}`; }
 	const luckFlag = el('luck-status');
 	if(luckFlag){
 		if(state.luck){
@@ -277,6 +282,7 @@ function setupFightBindings(){
 	el('fight-attack').onclick=()=>{ unwrapFight(game.fight_attack()); };
 	el('fight-flee').onclick=()=>{ unwrapFight(game.fight_flee()); };
 	el('fight-quit').onclick=()=>{ unwrapFight(game.fight_quit()); };
+		const desc = el('fight-desc'); if(desc){ desc.textContent = 'Turn-based battle: START then ATTACK or FLEE. HP & damage log shown below.'; }
 }
 // Shop
 el('act-shop-gen').onclick=()=>{ const res=game.generate_shop(); currentShop = res.items; buildShop(); log('Generated new shop stock'); };
