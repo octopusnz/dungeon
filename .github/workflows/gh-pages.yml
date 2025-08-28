@@ -1,14 +1,9 @@
 name: Deploy WASM to GitHub Pages
+
 on:
   push:
     branches: [ master ]
-  pull_request:
   workflow_dispatch:
-    inputs:
-      force_build:
-        description: "Force WASM rebuild (ignore change detection)"
-        required: false
-        default: "false"
 
 permissions:
   contents: read
@@ -20,147 +15,47 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  determine_changes:
+  build-and-deploy:
     runs-on: ubuntu-latest
-    outputs:
-      build_wasm: ${{ steps.detect_changes.outputs.build }}
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-      - name: Detect relevant changes (Rust or web assets)
-        id: detect_changes
-        run: |
-          set -euo pipefail
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            base="${{ github.event.pull_request.base.sha }}"
-          else
-            base=$(git rev-parse HEAD^ || echo '')
-          fi
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.force_build }}" = "true" ]; then
-            echo "Force build requested via workflow_dispatch input"; echo "build=1" >> "$GITHUB_OUTPUT"; exit 0;
-          fi
-          if [ -z "$base" ]; then
-            echo "No base commit (initial); forcing build"; echo "build=1" >> "$GITHUB_OUTPUT"; exit 0; fi
-          echo "Diff base: $base -> HEAD"
-          git diff --name-only "$base" HEAD > changed_files.txt
-          sed 's/^/CHANGED: /' changed_files.txt || true
-          if grep -E '^(src/|Cargo.toml|Cargo.lock|web/)' changed_files.txt >/dev/null; then
-            echo "Relevant source/web changes detected -> build wasm"; echo "build=1" >> "$GITHUB_OUTPUT"
-          else
-            echo "No relevant Rust changes -> skip wasm build"; echo "build=0" >> "$GITHUB_OUTPUT"
-          fi
 
-  wasm_build:
-    needs: determine_changes
-    if: ${{ github.ref == 'refs/heads/master' && needs.determine_changes.outputs.build_wasm == '1' }}
-    runs-on: ubuntu-latest
-    env:
-      RUSTFLAGS: -C debuginfo=0
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
-      - name: Restore cargo & sccache cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: cache-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            cache-${{ runner.os }}-
-      - name: Install wasm-bindgen-cli (match lockfile)
+
+      - name: Install wasm-bindgen-cli
         run: |
-          set -euo pipefail
           VERSION=$(grep -A1 'name = "wasm-bindgen"' Cargo.lock | grep 'version =' | head -n1 | cut -d '"' -f2)
-          if command -v wasm-bindgen >/dev/null; then
-            INSTALLED=$(wasm-bindgen --version | awk '{print $2}')
-            if [ "$INSTALLED" != "$VERSION" ]; then
-              cargo install wasm-bindgen-cli --force --version "$VERSION" --locked
-            fi
-          else
-            cargo install wasm-bindgen-cli --version "$VERSION" --locked
-          fi
-      - name: Build (wasm)
+          cargo install wasm-bindgen-cli --version "$VERSION" --locked
+
+      - name: Build WASM
         run: |
           cargo build --release --target wasm32-unknown-unknown --features wasm --lib
           mkdir -p web/pkg
           wasm-bindgen --target web --no-typescript --out-dir web/pkg target/wasm32-unknown-unknown/release/dungeon_core.wasm
           echo "build_sha=$(git rev-parse --short HEAD)" > web/pkg/version.txt
           touch web/.nojekyll
+
+      - name: Verify build
+        run: |
           test -f web/index.html || { echo 'index.html missing in web/'; exit 1; }
-          test -f web/pkg/dungeon_core_bg.wasm || { echo 'wasm-bindgen output missing'; ls -R web/pkg; exit 1; }
-      - name: Cache Binaryen
-        id: cache-binaryen
-        uses: actions/cache@v4
-        with:
-          path: ~/binaryen
-          key: binaryen-${{ runner.os }}-version_121
-      - name: Install Binaryen (cached)
-        if: steps.cache-binaryen.outputs.cache-hit != 'true'
-        run: |
-          set -euo pipefail
-          VERSION=121
-          curl -L -o /tmp/binaryen.tar.gz "https://github.com/WebAssembly/binaryen/releases/download/version_${VERSION}/binaryen-version_${VERSION}-x86_64-linux.tar.gz"
-          mkdir -p ~/binaryen
-          tar -xzf /tmp/binaryen.tar.gz -C ~/binaryen --strip-components=1
-          echo "Installed Binaryen version ${VERSION}"
-      - name: Optimize WASM (wasm-opt -Oz)
-        run: |
-          export PATH="${HOME}/binaryen/bin:${PATH}"
-          echo "Using wasm-opt version:" && wasm-opt --version || true
-          echo "Listing detected module features (pre-opt):" && wasm-opt --print-features web/pkg/dungeon_core_bg.wasm || true
-          if ! wasm-opt --all-features -Oz -o web/pkg/dungeon_core_bg.opt.wasm web/pkg/dungeon_core_bg.wasm; then
-            echo "Primary optimization failed; retry with --no-validation";
-            wasm-opt --all-features --no-validation -Oz -o web/pkg/dungeon_core_bg.opt.wasm web/pkg/dungeon_core_bg.wasm || { echo "wasm-opt failed"; exit 1; }
-          fi
-          mv web/pkg/dungeon_core_bg.opt.wasm web/pkg/dungeon_core_bg.wasm
-          ls -lh web/pkg/dungeon_core_bg.wasm
+          test -f web/pkg/dungeon_core_bg.wasm || { echo 'wasm output missing'; exit 1; }
+          ls -la web/pkg/
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: web
 
-  upload_static:
-    needs: determine_changes
-    if: ${{ github.ref == 'refs/heads/master' && needs.determine_changes.outputs.build_wasm != '1' }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-      - name: Verify static web assets
-        run: |
-          test -f web/index.html || { echo 'index.html missing'; exit 1; }
-          echo "Skipping wasm build; deploying static assets only." | tee -a "$GITHUB_STEP_SUMMARY"
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
-      - name: Upload artifact (static only)
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: web
-
-  deploy:
-    needs: [determine_changes, wasm_build, upload_static]
-    if: ${{ github.ref == 'refs/heads/master' && (needs.wasm_build.result == 'success' || needs.upload_static.result == 'success') }}
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-      - name: Summarize deployed URL
-        run: |
-          echo "Deployed to: ${{ steps.deployment.outputs.page_url }}" | tee -a "$GITHUB_STEP_SUMMARY"
-          echo "Commit: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
