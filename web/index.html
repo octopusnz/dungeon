@@ -260,29 +260,96 @@ function renderFight(fs){
 	el('fight-start').disabled=inFight;
 }
 function unwrapFight(res){
-	if(!res) return; renderFight(res); renderState(res.inventory); if(res.message) { log(res.message); updateSceneFromMessage(res.message); }
+	console.log('unwrapFight called with:', res);
+	if(!res) return; 
+	renderFight(res); 
+	renderState(res.inventory); 
+	if(res.message) { 
+		log(res.message); 
+		updateSceneFromMessage(res.message); 
+	}
 }
 function setupFightBindings(){
 	const hasInteractive = game && typeof game.fight_start === 'function';
+	console.log('Setting up fight bindings, hasInteractive:', hasInteractive);
+	
 	if(!hasInteractive){
 		// Fallback: create a single-action fight button if new API missing (stale wasm)
 		let fallback = document.getElementById('fight-fallback');
 		if(!fallback){
-			fallback = document.createElement('button');
-			fallback.id='fight-fallback';
-			fallback.textContent='LEGACY FIGHT';
-			fallback.style.marginTop='6px';
-			el('fight-panel').querySelector('.actions-grid').prepend(fallback);
-			const desc = el('fight-desc'); if(desc){ desc.textContent = 'Legacy fight mode active (update deployment for interactive combat).'; }
+			const fightPanel = el('fight-panel');
+			const actionsGrid = fightPanel?.querySelector('.actions-grid');
+			if(actionsGrid){
+				fallback = document.createElement('button');
+				fallback.id='fight-fallback';
+				fallback.textContent='LEGACY FIGHT';
+				fallback.style.marginTop='6px';
+				actionsGrid.prepend(fallback);
+				const desc = el('fight-desc'); 
+				if(desc){ desc.textContent = 'Legacy fight mode active (update deployment for interactive combat).'; }
+			}
 		}
-		fallback.onclick=()=>{ try { unwrap(game.fight()); } catch(e){ log('Fight unavailable: '+e); } };
+		if(fallback){
+			fallback.onclick=()=>{ try { unwrap(game.fight()); } catch(e){ log('Fight unavailable: '+e); } };
+		}
 		return;
 	}
-	el('fight-start').onclick=()=>{ unwrapFight(game.fight_start()); };
-	el('fight-attack').onclick=()=>{ unwrapFight(game.fight_attack()); };
-	el('fight-flee').onclick=()=>{ unwrapFight(game.fight_flee()); };
-	el('fight-quit').onclick=()=>{ unwrapFight(game.fight_quit()); };
-		const desc = el('fight-desc'); if(desc){ desc.textContent = 'Turn-based battle: START then ATTACK or FLEE. HP & damage log shown below.'; }
+	
+	// Interactive mode - bind the new fight functions
+	const startBtn = el('fight-start');
+	const attackBtn = el('fight-attack'); 
+	const fleeBtn = el('fight-flee');
+	const quitBtn = el('fight-quit');
+	
+	if(startBtn) startBtn.onclick=()=>{ 
+		console.log('Fight start clicked'); 
+		try {
+			const result = game.fight_start();
+			console.log('fight_start returned:', result);
+			unwrapFight(result);
+		} catch(e) {
+			console.error('Error calling fight_start:', e);
+			log('Error starting fight: ' + e.message);
+		}
+	};
+	if(attackBtn) attackBtn.onclick=()=>{ 
+		console.log('Fight attack clicked'); 
+		try {
+			const result = game.fight_attack();
+			console.log('fight_attack returned:', result);
+			unwrapFight(result);
+		} catch(e) {
+			console.error('Error calling fight_attack:', e);
+			log('Error attacking: ' + e.message);
+		}
+	};
+	if(fleeBtn) fleeBtn.onclick=()=>{ 
+		console.log('Fight flee clicked'); 
+		try {
+			const result = game.fight_flee();
+			console.log('fight_flee returned:', result);
+			unwrapFight(result);
+		} catch(e) {
+			console.error('Error calling fight_flee:', e);
+			log('Error fleeing: ' + e.message);
+		}
+	};
+	if(quitBtn) quitBtn.onclick=()=>{ 
+		console.log('Fight quit clicked'); 
+		try {
+			const result = game.fight_quit();
+			console.log('fight_quit returned:', result);
+			unwrapFight(result);
+		} catch(e) {
+			console.error('Error calling fight_quit:', e);
+			log('Error quitting fight: ' + e.message);
+		}
+	};
+	
+	const desc = el('fight-desc'); 
+	if(desc){ desc.textContent = 'Turn-based battle: START then ATTACK or FLEE. HP & damage log shown below.'; }
+	
+	console.log('Fight buttons bound:', {startBtn: !!startBtn, attackBtn: !!attackBtn, fleeBtn: !!fleeBtn, quitBtn: !!quitBtn});
 }
 // Shop
 el('act-shop-gen').onclick=()=>{ const res=game.generate_shop(); currentShop = res.items; buildShop(); log('Generated new shop stock'); };
