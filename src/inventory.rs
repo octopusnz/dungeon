@@ -128,10 +128,14 @@ impl Inventory {
     }
     #[cfg(any(feature = "cli", test))]
     pub fn load() -> Result<Self, Box<dyn std::error::Error>> {
-    let mut inv: Self = serde_json::from_str(&std::fs::read_to_string(SAVE_FILE)?)?;
-    if inv.max_hp == 0 { inv.max_hp = 20; }
-    if inv.current_hp == 0 || inv.current_hp > inv.max_hp { inv.current_hp = inv.max_hp; }
-    Ok(inv)
+        let mut inv: Self = serde_json::from_str(&std::fs::read_to_string(SAVE_FILE)?)?;
+        if inv.max_hp == 0 {
+            inv.max_hp = 20;
+        }
+        if inv.current_hp == 0 || inv.current_hp > inv.max_hp {
+            inv.current_hp = inv.max_hp;
+        }
+        Ok(inv)
     }
     #[cfg(all(feature = "wasm", not(feature = "cli"), not(test)))]
     pub fn save(&self) -> Result<(), Box<dyn std::error::Error>> {
@@ -139,7 +143,7 @@ impl Inventory {
     }
     #[cfg(all(feature = "wasm", not(feature = "cli"), not(test)))]
     pub fn load() -> Result<Self, Box<dyn std::error::Error>> {
-    Ok(Self::new())
+        Ok(Self::new())
     }
 }
 

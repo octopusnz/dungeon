@@ -67,7 +67,11 @@ impl From<WasmInventory> for Inventory {
             copper_pieces: w.cp,
             luck_boost: w.luck,
             max_hp: if w.max_hp == 0 { 20 } else { w.max_hp },
-            current_hp: if w.current_hp == 0 { w.max_hp.max(20) } else { w.current_hp.min(w.max_hp.max(20)) },
+            current_hp: if w.current_hp == 0 {
+                w.max_hp.max(20)
+            } else {
+                w.current_hp.min(w.max_hp.max(20))
+            },
         }
     }
 }
@@ -284,7 +288,7 @@ impl Game {
     pub fn reset(&mut self) -> JsValue {
         self.inv = Inventory::new();
         self.shop = None;
-    self.active_fight = None;
+        self.active_fight = None;
         self.wrap("Inventory reset")
     }
 
@@ -474,7 +478,11 @@ impl Game {
     // --- Interactive fight API (browser) ---
     fn fight_state(&self, message: impl Into<String>, lines: Vec<String>) -> JsValue {
         let (monster, m_hp, m_max) = if let Some(f) = &self.active_fight {
-            (Some(f.monster.name.to_string()), f.monster_hp, f.monster.max_hp())
+            (
+                Some(f.monster.name.to_string()),
+                f.monster_hp,
+                f.monster.max_hp(),
+            )
         } else {
             (None, 0, 0)
         };
@@ -498,40 +506,92 @@ impl Game {
             return self.fight_state("Already in battle", vec![]);
         }
         // Initialize player hp if needed
-        if self.inv.max_hp == 0 { self.inv.max_hp = 20; }
-        if self.inv.current_hp == 0 || self.inv.current_hp > self.inv.max_hp { self.inv.current_hp = self.inv.max_hp; }
+        if self.inv.max_hp == 0 {
+            self.inv.max_hp = 20;
+        }
+        if self.inv.current_hp == 0 || self.inv.current_hp > self.inv.max_hp {
+            self.inv.current_hp = self.inv.max_hp;
+        }
         // Monster table (mirror of CLI)
         const MONSTERS: &[crate::actions::Monster] = &[
-            crate::actions::Monster { name: "Goblin Sneak", strength: 1 },
-            crate::actions::Monster { name: "Cave Rat", strength: 1 },
-            crate::actions::Monster { name: "Skeleton Guard", strength: 2 },
-            crate::actions::Monster { name: "Orc Marauder", strength: 3 },
-            crate::actions::Monster { name: "Ghoul", strength: 4 },
-            crate::actions::Monster { name: "Ogre Brute", strength: 5 },
-            crate::actions::Monster { name: "Wyvern", strength: 6 },
-            crate::actions::Monster { name: "Vampire Stalker", strength: 7 },
-            crate::actions::Monster { name: "Stone Golem", strength: 8 },
-            crate::actions::Monster { name: "Ancient Lich", strength: 9 },
-            crate::actions::Monster { name: "Dragon Wyrm", strength: 10 },
+            crate::actions::Monster {
+                name: "Goblin Sneak",
+                strength: 1,
+            },
+            crate::actions::Monster {
+                name: "Cave Rat",
+                strength: 1,
+            },
+            crate::actions::Monster {
+                name: "Skeleton Guard",
+                strength: 2,
+            },
+            crate::actions::Monster {
+                name: "Orc Marauder",
+                strength: 3,
+            },
+            crate::actions::Monster {
+                name: "Ghoul",
+                strength: 4,
+            },
+            crate::actions::Monster {
+                name: "Ogre Brute",
+                strength: 5,
+            },
+            crate::actions::Monster {
+                name: "Wyvern",
+                strength: 6,
+            },
+            crate::actions::Monster {
+                name: "Vampire Stalker",
+                strength: 7,
+            },
+            crate::actions::Monster {
+                name: "Stone Golem",
+                strength: 8,
+            },
+            crate::actions::Monster {
+                name: "Ancient Lich",
+                strength: 9,
+            },
+            crate::actions::Monster {
+                name: "Dragon Wyrm",
+                strength: 10,
+            },
         ];
         let mut rng = rand::rngs::SmallRng::from_entropy();
         use rand::seq::SliceRandom;
         let monster = *MONSTERS.choose(&mut rng).unwrap();
-        let encounter = FightEncounter { monster, monster_hp: monster.max_hp() };
+        let encounter = FightEncounter {
+            monster,
+            monster_hp: monster.max_hp(),
+        };
         self.active_fight = Some(encounter);
-    self.fight_state(format!("A {} appears!", monster.name), vec![format!("A {} appears with {} HP!", monster.name, monster.max_hp())])
+        self.fight_state(
+            format!("A {} appears!", monster.name),
+            vec![format!(
+                "A {} appears with {} HP!",
+                monster.name,
+                monster.max_hp()
+            )],
+        )
     }
 
     #[wasm_bindgen]
     pub fn fight_attack(&mut self) -> JsValue {
-        if self.active_fight.is_none() { return self.fight_state("No active fight", vec![]); }
+        if self.active_fight.is_none() {
+            return self.fight_state("No active fight", vec![]);
+        }
         let mut rng = rand::rngs::SmallRng::from_entropy();
         // Player attack
         let mut lines: Vec<String> = Vec::new();
         if let Some(enc) = &mut self.active_fight {
             let dmg = rng.gen_range(2..=6);
             enc.monster_hp = enc.monster_hp.saturating_sub(dmg);
-            lines.push(format!("You strike the {} for {} damage", enc.monster.name, dmg));
+            lines.push(format!(
+                "You strike the {} for {} damage",
+                enc.monster.name, dmg
+            ));
             if enc.monster_hp == 0 {
                 // Victory & reward
                 let min_gp = (10 * (enc.monster.strength as u32).max(1)).max(5);
@@ -549,7 +609,10 @@ impl Game {
         if let Some(enc) = &mut self.active_fight {
             let dmg = rng.gen_range(enc.monster.damage_range());
             self.inv.current_hp = self.inv.current_hp.saturating_sub(dmg);
-            lines.push(format!("The {} hits you for {} damage", enc.monster.name, dmg));
+            lines.push(format!(
+                "The {} hits you for {} damage",
+                enc.monster.name, dmg
+            ));
             if self.inv.current_hp == 0 {
                 // Defeat penalty: 10% gold & up to 3 items, restore hp
                 let before_gp = self.inv.gold_pieces;
@@ -557,7 +620,13 @@ impl Game {
                 let loss = loss.clamp(0, self.inv.gold_pieces);
                 self.inv.gold_pieces -= loss;
                 // Remove up to 3 random items
-                for _ in 0..3 { if self.inv.items.is_empty() { break; } let idx = rng.gen_range(0..self.inv.items.len()); self.inv.items.remove(idx); }
+                for _ in 0..3 {
+                    if self.inv.items.is_empty() {
+                        break;
+                    }
+                    let idx = rng.gen_range(0..self.inv.items.len());
+                    self.inv.items.remove(idx);
+                }
                 self.inv.current_hp = self.inv.max_hp; // restore
                 self.inv.save_after_pickup();
                 let name = enc.monster.name.to_string();
@@ -571,23 +640,33 @@ impl Game {
 
     #[wasm_bindgen]
     pub fn fight_flee(&mut self) -> JsValue {
-    if self.active_fight.is_none() { return self.fight_state("No active fight", vec![]); }
+        if self.active_fight.is_none() {
+            return self.fight_state("No active fight", vec![]);
+        }
         // Flee penalty: lose 5% gold (rounded) & 1 random item
         let mut rng = rand::rngs::SmallRng::from_entropy();
         let before_gold = self.inv.gold_pieces;
         let gold_loss = ((before_gold as f64) * 0.05).round() as u32;
         let gold_loss = gold_loss.clamp(0, self.inv.gold_pieces);
         self.inv.gold_pieces -= gold_loss;
-        if !self.inv.items.is_empty() { let idx = rng.gen_range(0..self.inv.items.len()); self.inv.items.remove(idx); }
+        if !self.inv.items.is_empty() {
+            let idx = rng.gen_range(0..self.inv.items.len());
+            self.inv.items.remove(idx);
+        }
         self.inv.save_after_pickup();
         self.active_fight = None;
-    self.fight_state(format!("You flee"), vec![format!("You flee, dropping {} gp", gold_loss)])
+        self.fight_state(
+            format!("You flee"),
+            vec![format!("You flee, dropping {} gp", gold_loss)],
+        )
     }
 
     #[wasm_bindgen]
     pub fn fight_quit(&mut self) -> JsValue {
-    if self.active_fight.is_none() { return self.fight_state("No active fight", vec![]); }
+        if self.active_fight.is_none() {
+            return self.fight_state("No active fight", vec![]);
+        }
         self.active_fight = None;
-    self.fight_state("You withdraw", vec!["You withdraw from the battle".into()])
+        self.fight_state("You withdraw", vec!["You withdraw from the battle".into()])
     }
 }

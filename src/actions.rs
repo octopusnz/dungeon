@@ -24,14 +24,16 @@ pub const TAVERN_FLIRT_KISS_CHANCE: f64 = 0.05; // 5% chance to gain luck via ki
 #[derive(Clone, Copy)]
 pub struct Monster {
     pub name: &'static str,
-    pub strength: u8,  // influences hp & damage
+    pub strength: u8, // influences hp & damage
 }
 
 impl Monster {
-    pub fn max_hp(&self) -> u32 { 5 + (self.strength as u32 * 5) }
+    pub fn max_hp(&self) -> u32 {
+        5 + (self.strength as u32 * 5)
+    }
     pub fn damage_range(&self) -> std::ops::RangeInclusive<u32> {
         let base = self.strength as u32;
-    base..=base+4
+        base..=base + 4
     }
 }
 
@@ -95,8 +97,12 @@ pub fn fight_monster_outcome(inv: &mut Inventory) -> FightOutcome {
     ];
     let monster = with_rng(|r| *MONSTERS.choose(r).unwrap());
     // Ensure player hp initialized
-    if inv.max_hp == 0 { inv.max_hp = 20; }
-    if inv.current_hp == 0 || inv.current_hp > inv.max_hp { inv.current_hp = inv.max_hp; }
+    if inv.max_hp == 0 {
+        inv.max_hp = 20;
+    }
+    if inv.current_hp == 0 || inv.current_hp > inv.max_hp {
+        inv.current_hp = inv.max_hp;
+    }
     let mut m_hp = monster.max_hp();
     // Auto-resolve: alternate blows until one drops
     let mut turn_player = true;
@@ -116,7 +122,14 @@ pub fn fight_monster_outcome(inv: &mut Inventory) -> FightOutcome {
         let reward = with_rng(|r| r.gen_range(min_gp..=max_gp));
         inv.gold_pieces = inv.gold_pieces.saturating_add(reward);
         inv.save_after_pickup();
-        FightOutcome { monster: monster.name, victory: true, reward_gp: reward, loss_gp: 0, player_hp_end: inv.current_hp, monster_hp_end: m_hp }
+        FightOutcome {
+            monster: monster.name,
+            victory: true,
+            reward_gp: reward,
+            loss_gp: 0,
+            player_hp_end: inv.current_hp,
+            monster_hp_end: m_hp,
+        }
     } else {
         // Player defeated: apply new penalty (10% gold, 3 items) and restore hp to full after
         let before_gp = inv.gold_pieces;
@@ -126,13 +139,22 @@ pub fn fight_monster_outcome(inv: &mut Inventory) -> FightOutcome {
         // Remove up to 3 random items
         let mut removed = Vec::new();
         for _ in 0..3 {
-            if inv.items.is_empty() { break; }
+            if inv.items.is_empty() {
+                break;
+            }
             let idx = with_rng(|r| r.gen_range(0..inv.items.len()));
             removed.push(inv.items.remove(idx));
         }
         inv.current_hp = inv.max_hp; // restore
         inv.save_after_pickup();
-        FightOutcome { monster: monster.name, victory: false, reward_gp: 0, loss_gp: loss, player_hp_end: inv.current_hp, monster_hp_end: m_hp }
+        FightOutcome {
+            monster: monster.name,
+            victory: false,
+            reward_gp: 0,
+            loss_gp: loss,
+            player_hp_end: inv.current_hp,
+            monster_hp_end: m_hp,
+        }
     }
 }
 
@@ -190,37 +212,92 @@ pub fn fight_monster(inv: &mut Inventory) {
     crate::print_simple_header("Battle");
     // Pick monster
     const MONSTERS: &[Monster] = &[
-        Monster { name: "Goblin Sneak", strength: 1 },
-        Monster { name: "Cave Rat", strength: 1 },
-        Monster { name: "Skeleton Guard", strength: 2 },
-        Monster { name: "Orc Marauder", strength: 3 },
-        Monster { name: "Ghoul", strength: 4 },
-        Monster { name: "Ogre Brute", strength: 5 },
-        Monster { name: "Wyvern", strength: 6 },
-        Monster { name: "Vampire Stalker", strength: 7 },
-        Monster { name: "Stone Golem", strength: 8 },
-        Monster { name: "Ancient Lich", strength: 9 },
-        Monster { name: "Dragon Wyrm", strength: 10 },
+        Monster {
+            name: "Goblin Sneak",
+            strength: 1,
+        },
+        Monster {
+            name: "Cave Rat",
+            strength: 1,
+        },
+        Monster {
+            name: "Skeleton Guard",
+            strength: 2,
+        },
+        Monster {
+            name: "Orc Marauder",
+            strength: 3,
+        },
+        Monster {
+            name: "Ghoul",
+            strength: 4,
+        },
+        Monster {
+            name: "Ogre Brute",
+            strength: 5,
+        },
+        Monster {
+            name: "Wyvern",
+            strength: 6,
+        },
+        Monster {
+            name: "Vampire Stalker",
+            strength: 7,
+        },
+        Monster {
+            name: "Stone Golem",
+            strength: 8,
+        },
+        Monster {
+            name: "Ancient Lich",
+            strength: 9,
+        },
+        Monster {
+            name: "Dragon Wyrm",
+            strength: 10,
+        },
     ];
     let monster = with_rng(|r| *MONSTERS.choose(r).unwrap());
-    if inv.max_hp == 0 { inv.max_hp = 20; }
-    if inv.current_hp == 0 || inv.current_hp > inv.max_hp { inv.current_hp = inv.max_hp; }
+    if inv.max_hp == 0 {
+        inv.max_hp = 20;
+    }
+    if inv.current_hp == 0 || inv.current_hp > inv.max_hp {
+        inv.current_hp = inv.max_hp;
+    }
     let mut m_hp = monster.max_hp();
-    println!("⚔️  A {} appears! (HP {} / Damage {:?})", monster.name, m_hp, monster.damage_range());
+    println!(
+        "⚔️  A {} appears! (HP {} / Damage {:?})",
+        monster.name,
+        m_hp,
+        monster.damage_range()
+    );
     loop {
-        println!("You: {}/{} HP   {}: {} HP", inv.current_hp, inv.max_hp, monster.name, m_hp);
+        println!(
+            "You: {}/{} HP   {}: {} HP",
+            inv.current_hp, inv.max_hp, monster.name, m_hp
+        );
         print!("[A]ttack, [F]lee, or [Q]uit fight? ");
         let _ = io::stdout().flush();
         let mut line = String::new();
-        if io::stdin().read_line(&mut line).is_err() { println!("You hesitate..."); continue; }
-        let action = line.trim().chars().next().unwrap_or('a').to_ascii_lowercase();
+        if io::stdin().read_line(&mut line).is_err() {
+            println!("You hesitate...");
+            continue;
+        }
+        let action = line
+            .trim()
+            .chars()
+            .next()
+            .unwrap_or('a')
+            .to_ascii_lowercase();
         match action {
             'a' => {
                 // Player attack
                 let dmg = with_rng(|r| r.gen_range(2..=6));
                 m_hp = m_hp.saturating_sub(dmg);
                 println!("You strike the {} for {} damage!", monster.name, dmg);
-                if m_hp == 0 { println!("You slew the {}!", monster.name); }
+                if m_hp == 0 {
+                    println!("You slew the {}!", monster.name);
+                }
             }
             'f' => {
                 // Flee penalty: lose random item (1) and 5% gold
@@ -236,11 +313,21 @@ pub fn fight_monster(inv: &mut Inventory) {
                 let before_inv = inv.clone(); // after removal modifications captured below
                 inv.save_after_pickup();
                 crate::print_event_summary("Fled Battle", &before_inv, inv, &[], &removed);
-                println!("You fled, losing {} gp and {} item(s).", gold_loss, removed.len());
+                println!(
+                    "You fled, losing {} gp and {} item(s).",
+                    gold_loss,
+                    removed.len()
+                );
                 return;
             }
-            'q' => { println!("You withdraw from the battle."); return; }
-            _ => { println!("Action not recognized."); continue; }
+            'q' => {
+                println!("You withdraw from the battle.");
+                return;
+            }
+            _ => {
+                println!("Action not recognized.");
+                continue;
+            }
         }
         // Monster turn if still alive
         if m_hp > 0 {
@@ -269,7 +356,9 @@ pub fn fight_monster(inv: &mut Inventory) {
             // Remove up to 3 random items
             let mut removed = Vec::new();
             for _ in 0..3 {
-                if inv.items.is_empty() { break; }
+                if inv.items.is_empty() {
+                    break;
+                }
                 let idx = with_rng(|r| r.gen_range(0..inv.items.len()));
                 removed.push(inv.items.remove(idx));
             }
